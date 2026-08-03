@@ -1,0 +1,16 @@
+[Unit]
+Description=Stremio linear channels
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/stremio-channels
+ExecStart=/usr/bin/node %h/stremio-channels/dist/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

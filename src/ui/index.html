@@ -1,0 +1,1913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stremio Channels</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2330; --line: #2b3440;
+    --text: #e6edf3; --dim: #8b949e; --accent: #58a6ff; --live: #3fb950;
+    --warn: #d29922; --danger: #f85149;
+    --radius: 8px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa; --panel: #fff; --panel-2: #f0f3f6; --line: #d0d7de;
+      --text: #1f2328; --dim: #636c76; --accent: #0969da;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
+  h1, h2, h3 { margin: 0; font-weight: 600; }
+  button, input, select { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; margin-right: auto; }
+  nav { display: flex; gap: 4px; }
+  nav button {
+    background: none; border: 1px solid transparent; padding: 6px 12px;
+    border-radius: var(--radius); cursor: pointer;
+  }
+  nav button:hover { background: var(--panel-2); }
+  nav button.on { background: var(--panel-2); border-color: var(--line); color: var(--accent); }
+
+  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+  .view { display: none; }
+  .view.on { display: block; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spread { justify-content: space-between; }
+  .muted { color: var(--dim); font-size: 13px; }
+  .pill {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--dim);
+  }
+  .pill.live { color: var(--live); border-color: var(--live); }
+
+  button.act {
+    background: var(--panel-2); border: 1px solid var(--line); padding: 6px 12px;
+    border-radius: var(--radius); cursor: pointer;
+  }
+  button.act:hover { border-color: var(--accent); color: var(--accent); }
+  button.act.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.act.danger:hover { border-color: var(--danger); color: var(--danger); }
+  button.act:disabled { opacity: .5; cursor: not-allowed; }
+
+  input[type=text], input[type=number], select {
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 10px;
+  }
+  input[type=text]:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; }
+
+  /* EPG grid: a horizontally scrolling timeline, one row per channel. */
+  .guide-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+  .guide-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+  .guide-row:last-child { border-bottom: none; }
+  .guide-label {
+    flex: 0 0 160px; padding: 10px 12px; background: var(--panel);
+    border-right: 1px solid var(--line); position: sticky; left: 0; z-index: 2;
+  }
+  .guide-track { display: flex; position: relative; background: var(--panel-2); }
+  .prog {
+    border-right: 1px solid var(--line); padding: 8px 10px; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis; min-width: 0; font-size: 13px;
+  }
+  .prog.now { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .prog small { display: block; color: var(--dim); font-size: 11px; }
+  .ruler { display: flex; margin-left: 160px; }
+  .tick { border-left: 1px solid var(--line); padding: 4px 6px; font-size: 11px; color: var(--dim); }
+
+  .results { max-height: 300px; overflow-y: auto; }
+  .result {
+    display: flex; gap: 10px; align-items: center; padding: 6px;
+    border-radius: 6px; cursor: pointer;
+  }
+  .result:hover { background: var(--panel-2); }
+  .result img { width: 32px; height: 48px; object-fit: cover; border-radius: 4px; background: var(--panel-2); }
+
+  dialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 0; max-width: 720px; width: 92vw;
+  }
+  dialog.wide { max-width: 1100px; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .dlg-body { padding: 16px; max-height: 70vh; overflow-y: auto; }
+  .dlg-foot { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+
+  .daypart { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  .bar div { font-size: 10px; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 16px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--danger); color: var(--danger); }
+  video { width: 100%; border-radius: var(--radius); background: #000; }
+  .steps { display:flex; gap:6px; margin:12px 0 16px; }
+  .steps button { flex:1; }
+  .steps button.on { border-color:var(--accent); color:var(--accent); }
+  .pool-grid { display:grid; grid-template-columns:minmax(180px,240px) 1fr; gap:12px; }
+  .pool-list button { width:100%; text-align:left; margin-bottom:6px; }
+  .pool-list button.on { border-color:var(--accent); color:var(--accent); }
+  .poster-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(125px,1fr)); gap:10px; margin-top:10px; }
+  .poster-card { border:1px solid var(--line); border-radius:6px; padding:7px; background:var(--panel-2); }
+  .poster-card img { width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:4px; background:var(--bg); }
+  .poster-card .title { font-size:12px; margin:5px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .week-row { display:grid; grid-template-columns:42px 1fr; gap:8px; align-items:center; margin:4px 0; }
+  .progress { height:7px; border-radius:999px; background:var(--panel-2); overflow:hidden; min-width:100px; }
+  .progress span { display:block; height:100%; background:var(--accent); }
+  .section-box { border:1px solid var(--line); border-radius:6px; padding:12px; margin:10px 0; }
+  .tmdb-credit { display:flex; gap:14px; align-items:center; margin-top:16px; }
+  .tmdb-credit img { width:84px; height:auto; display:block; }
+  textarea { width:100%; min-height:260px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px; font:12px ui-monospace,monospace; }
+  @media (max-width:700px) { .pool-grid { grid-template-columns:1fr; } .steps { overflow-x:auto; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stremio Channels</h1>
+  <nav>
+    <button data-view="guide" class="on">Guide</button>
+    <button data-view="channels">Channels</button>
+    <button data-view="presets">Presets</button>
+    <button data-view="ops">Ops</button>
+    <button data-view="about">About</button>
+  </nav>
+  <span id="cooldown" class="pill" hidden></span>
+</header>
+
+<main>
+  <section id="view-guide" class="view on">
+    <div class="card row spread">
+      <div class="row">
+        <label class="muted">Hours</label>
+        <select id="guide-hours">
+          <option value="6">6</option>
+          <option value="12" selected>12</option>
+          <option value="24">24</option>
+        </select>
+      </div>
+      <button class="act" onclick="loadGuide()">Refresh</button>
+    </div>
+    <div id="guide"></div>
+  </section>
+
+  <section id="view-channels" class="view">
+    <div class="card row spread">
+      <h2>Channels</h2>
+      <button class="act primary" onclick="openCreator(null)">New channel</button>
+    </div>
+    <div id="channels"></div>
+  </section>
+
+  <section id="view-presets" class="view">
+    <div class="card">
+      <h2>Network presets</h2>
+      <p class="muted">
+        Each preset is a complete channel with a lineup and a daypart grid. Applying one
+        copies it into your channels — it stays fully editable and never changes on its own.
+      </p>
+    </div>
+    <div id="presets"></div>
+  </section>
+
+  <section id="view-ops" class="view">
+    <div class="card row spread">
+      <h2>Status</h2>
+      <button class="act" onclick="loadOps()">Refresh</button>
+    </div>
+    <div id="ops"></div>
+    <div class="card">
+      <h3>Preview</h3>
+      <p class="muted">Plays a channel here so you can check it without switching to Stremio.</p>
+      <div class="row" style="margin:10px 0">
+        <select id="preview-channel"></select>
+        <button class="act" onclick="startPreview()">Play</button>
+        <button class="act" onclick="stopPreview()">Stop</button>
+        <span id="preview-status" class="muted"></span>
+      </div>
+      <video id="preview" controls playsinline></video>
+    </div>
+  </section>
+
+  <section id="view-about" class="view">
+    <div class="card">
+      <h2>About</h2>
+      <p>Clock-synchronised personal linear television for Stremio.</p>
+      <div class="tmdb-credit">
+        <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer"
+           aria-label="The Movie Database">
+          <img alt="TMDB"
+               src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg">
+        </a>
+        <p class="muted">
+          This product uses TMDB and the TMDB APIs but is not endorsed, certified, or
+          otherwise approved by TMDB. TV metadata may also be provided by
+          <a href="https://www.tvmaze.com" target="_blank" rel="noreferrer">TVmaze</a>.
+        </p>
+      </div>
+      <p class="muted">
+        Self-hosted under the <a href="https://github.com/Lancej1011/stremio-channels/blob/main/LICENSE"
+        target="_blank" rel="noreferrer">MIT License</a>. Keep the editor on localhost,
+        a trusted LAN, or a private VPN; it has no built-in authentication.
+      </p>
+    </div>
+  </section>
+</main>
+
+<dialog id="creator" class="wide">
+  <div class="dlg-body">
+    <div class="row spread">
+      <div>
+        <h2 id="creator-title">Create channel</h2>
+        <div id="creator-saved" class="muted"></div>
+      </div>
+      <button class="act" onclick="showCreatorJson()">Advanced JSON</button>
+    </div>
+    <div class="steps" id="creator-steps"></div>
+    <div id="creator-body"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="act" onclick="closeCreator()">Cancel</button>
+    <button class="act" id="creator-back" onclick="creatorMove(-1)">Back</button>
+    <button class="act primary" id="creator-next" onclick="creatorMove(1)">Next</button>
+  </div>
+</dialog>
+
+<dialog id="editor">
+  <div class="dlg-body">
+    <h2 id="editor-title">Channel</h2>
+    <div class="row" style="margin:12px 0">
+      <input type="text" id="ch-id" placeholder="id (lowercase)" style="width:140px">
+      <input type="text" id="ch-name" placeholder="Display name" style="flex:1;min-width:180px">
+    </div>
+    <input type="text" id="ch-desc" placeholder="Description (optional)" style="width:100%;margin-bottom:12px">
+
+    <h3>Playback order</h3>
+    <div class="muted" style="margin:4px 0 8px">
+      This controls how the chosen content airs. It is separate from where the content comes from.
+    </div>
+    <div class="row">
+      <select id="ch-strategy" title="How this channel picks what airs">
+        <option value="shuffle">Shuffle every episode</option>
+        <option value="sequential">Rotate shows, episodes in order</option>
+        <option value="weighted">Weighted rotation</option>
+      </select>
+      <label class="muted">Reshuffle seed</label>
+      <input type="number" id="ch-seed" placeholder="seed" style="width:90px">
+      <span id="strategy-note" class="muted"></span>
+    </div>
+
+    <h3 style="margin-top:16px">Content source</h3>
+    <div class="muted" style="margin:4px 0 8px">
+      Pick titles by hand, populate them automatically, or combine both. Automatic matches
+      are added to anything you select below.
+    </div>
+    <div class="row">
+      <select id="src-kind">
+        <option value="">None - hand-picked only</option>
+      </select>
+      <span id="src-note" class="muted"></span>
+    </div>
+    <div id="src-editor" style="margin-top:8px"></div>
+
+    <h3 style="margin-top:16px">Content</h3>
+    <div class="muted" style="margin:4px 0 8px">
+      Search adds titles by name. Weight only matters for the weighted strategy.
+    </div>
+    <div class="row">
+      <input type="text" id="search" placeholder="Search films and shows..." style="flex:1">
+    </div>
+    <div id="results" class="results"></div>
+    <table id="content-table"><tbody></tbody></table>
+
+    <h3 style="margin-top:16px">Dayparts</h3>
+    <div class="muted" style="margin:4px 0 8px">
+      Optional. Hours not covered use the channel default. Ranges may cross midnight.
+    </div>
+    <div id="bar-wrap"></div>
+    <div id="dayparts"></div>
+    <button class="act" onclick="addDaypart()">Add daypart</button>
+
+    <h3 style="margin-top:16px">Projected schedule</h3>
+    <div class="muted" style="margin:4px 0 8px">
+      Simulates the next 12 hours without saving or using TorBox. Estimated runtimes may
+      move programs near a daypart boundary after the channel is saved.
+    </div>
+    <button class="act" id="preview-draft-btn" onclick="previewDraft()">Preview next 12 hours</button>
+    <div id="draft-preview" style="margin-top:8px"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="act danger" id="delete-btn" onclick="deleteChannel()">Delete</button>
+    <button class="act" onclick="editor.close()">Cancel</button>
+    <button class="act primary" onclick="saveChannel()">Save</button>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="/ui/hls.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const el = (t, props = {}, kids = []) => {
+  const n = Object.assign(document.createElement(t), props);
+  for (const k of [].concat(kids)) n.append(k);
+  return n;
+};
+const fmtTime = (ms) =>
+  new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+let state = {
+  channels: [], editing: null, draft: null, sources: null, metadata: null,
+  creator: { step: 0, editing: null, draft: null, poolId: null, preview: null, matches: {}, similar: null },
+};
+
+const STRATEGY_NOTES = {
+  shuffle: "Every episode enters one seeded no-repeat shuffle.",
+  sequential: "Shows rotate; each show continues with its next episode.",
+  weighted: "Higher-weight shows appear more often while episodes continue in order.",
+};
+
+function toast(msg, isError) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "show" + (isError ? " err" : "");
+  setTimeout(() => (t.className = ""), 2600);
+}
+
+async function api(path, options) {
+  const res = await fetch(path, {
+    ...options,
+    headers: options?.body ? { "Content-Type": "application/json" } : undefined,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `${res.status} ${res.statusText}`);
+  return body;
+}
+
+// ---------------------------------------------------------------- navigation
+
+document.querySelectorAll("nav button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".view").forEach((v) =>
+      v.classList.toggle("on", v.id === "view-" + b.dataset.view),
+    );
+    const loader = ({ guide: loadGuide, channels: loadChannels, presets: loadPresets, ops: loadOps })[
+      b.dataset.view
+    ];
+    if (loader) loader();
+  }),
+);
+
+// ---------------------------------------------------------------- guide
+
+async function loadGuide() {
+  const hours = Number($("#guide-hours").value);
+  const data = await api(`/api/guide?hours=${hours}`);
+  const wrap = $("#guide");
+  wrap.textContent = "";
+
+  if (!data.channels.length) {
+    wrap.append(el("div", { className: "card muted", textContent: "No channels yet." }));
+    return;
+  }
+
+  // Fixed pixels-per-minute keeps every channel on one shared timeline, so blocks
+  // line up across rows the way a real printed guide does.
+  const PPM = 4;
+  const scroll = el("div", { className: "guide-scroll" });
+
+  const ruler = el("div", { className: "ruler" });
+  const startHour = new Date(data.now);
+  startHour.setMinutes(0, 0, 0);
+  for (let h = 0; h <= hours; h++) {
+    const t = new Date(startHour.getTime() + h * 3600000);
+    ruler.append(
+      el("div", {
+        className: "tick",
+        textContent: t.getHours().toString().padStart(2, "0") + ":00",
+        style: `min-width:${60 * PPM}px`,
+      }),
+    );
+  }
+  scroll.append(ruler);
+
+  for (const ch of data.channels) {
+    const row = el("div", { className: "guide-row" });
+    row.append(
+      el("div", { className: "guide-label" }, [
+        el("div", { textContent: ch.name }),
+        el("span", { className: "pill" + (ch.live ? " live" : ""), textContent: ch.live ? "LIVE" : "idle" }),
+      ]),
+    );
+
+    const track = el("div", { className: "guide-track" });
+    if (!ch.programs.length) {
+      track.append(el("div", { className: "prog muted", textContent: "nothing scheduled yet", style: "min-width:300px" }));
+    }
+    for (const p of ch.programs) {
+      const width = Math.max(40, (p.duration / 60000) * PPM);
+      track.append(
+        el("div", { className: "prog" + (p.isNow ? " now" : ""), style: `width:${width}px`, title: p.title }, [
+          el("span", { textContent: p.title }),
+          el("small", { textContent: fmtTime(p.start) + (p.daypart ? " · " + p.daypart : "") }),
+        ]),
+      );
+    }
+    row.append(track);
+    scroll.append(row);
+  }
+  wrap.append(scroll);
+}
+$("#guide-hours").addEventListener("change", loadGuide);
+
+// ---------------------------------------------------------------- channels
+
+async function loadChannels() {
+  const { channels } = await api("/api/channels");
+  state.channels = channels;
+  const wrap = $("#channels");
+  wrap.textContent = "";
+
+  if (!channels.length) {
+    wrap.append(el("div", { className: "card muted", textContent: "No channels. Create one, or apply a preset." }));
+    return;
+  }
+
+  for (const ch of channels) {
+    const card = el("div", { className: "card" });
+    card.append(
+      el("div", { className: "row spread" }, [
+        el("div", {}, [
+          el("h3", { textContent: ch.name }),
+          el("div", { className: "muted", textContent:
+            `${ch.id} · ${ch.strategy} · ` +
+            (ch.pools?.length
+              ? `${ch.pools.length} content pool${ch.pools.length === 1 ? "" : "s"}`
+              : `${ch.content.length} titles`) +
+            (ch.source ? ` + ${describeSource(ch.source)}` : "") +
+            (ch.dayparts.length ? ` · ${ch.dayparts.length} dayparts` : "") }),
+        ]),
+        el("div", { className: "row" }, [
+          el("button", { className: "act primary", textContent: "Edit", onclick: () => openCreator(ch.id) }),
+          el("button", { className: "act", textContent: "Classic", title: "Open the original editor",
+            onclick: () => editChannel(ch.id) }),
+        ]),
+      ]),
+    );
+    if (ch.dayparts.length) card.append(daypartBar(ch.dayparts));
+    wrap.append(card);
+  }
+}
+
+function describeSource(src) {
+  if (src.kind === "rule") {
+    return [
+      "auto:",
+      src.genres?.length ? src.genres.join("/") : "any genre",
+      src.years ? `${src.years[0]}-${src.years[1]}` : null,
+      src.minRating ? `${src.minRating}+` : null,
+    ].filter(Boolean).join(" ");
+  }
+  if (src.kind === "stremio") return `auto: my ${src.include ?? "all"}`;
+  if (src.kind === "tmdb") return `TMDB ${src.type} rule`;
+  return `auto: ${src.kind}`;
+}
+
+/** 24-hour bar showing which blocks cover which hours. */
+function daypartBar(dayparts) {
+  const hues = [200, 280, 340, 40, 120, 170];
+  const bar = el("div", { className: "bar", style: "margin-top:10px" });
+  const mins = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+
+  // Paint minute by minute so blocks crossing midnight render correctly rather than
+  // wrapping off the end of the bar.
+  const owner = new Array(1440).fill(-1);
+  dayparts.forEach((d, i) => {
+    const a = mins(d.start), b = mins(d.end);
+    for (let m = 0; m < 1440; m++) {
+      const inside = a === b ? true : a < b ? m >= a && m < b : m >= a || m < b;
+      if (inside && owner[m] === -1) owner[m] = i;
+    }
+  });
+
+  let m = 0;
+  while (m < 1440) {
+    const who = owner[m];
+    let run = 1;
+    while (m + run < 1440 && owner[m + run] === who) run++;
+    const seg = el("div", {
+      textContent: run > 90 ? (who === -1 ? "default" : dayparts[who].name) : "",
+      style:
+        `width:${(run / 1440) * 100}%;` +
+        (who === -1
+          ? "background:var(--panel-2);color:var(--dim)"
+          : `background:hsl(${hues[who % hues.length]} 55% 40%)`),
+      title: who === -1 ? "channel default" : `${dayparts[who].name} ${dayparts[who].start}-${dayparts[who].end}`,
+    });
+    bar.append(seg);
+    m += run;
+  }
+  return bar;
+}
+
+// ---------------------------------------------------------------- guided creator
+
+const creator = $("#creator");
+const CREATOR_STEPS = ["Basics", "Content pools", "Schedule", "Review"];
+const CREATOR_KEY = (id) => `stremio-channel-creator:${id || "new"}`;
+const DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_LABELS = { mon:"M", tue:"T", wed:"W", thu:"T", fri:"F", sat:"S", sun:"S" };
+
+function newCreatorDraft() {
+  return {
+    id: "", name: "", description: "", strategy: "sequential",
+    seed: Math.floor(Math.random() * 9999), content: [], refreshHours: 168,
+    pools: [{ id: "main", name: "Main lineup", content: [], excluded: [], refreshHours: 168 }],
+    defaultPoolIds: ["main"], dayparts: [],
+  };
+}
+
+function uniqueLocalId(wanted, used) {
+  const base = (wanted || "pool").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "pool";
+  let id = base, n = 2;
+  while (used.has(id)) id = `${base}-${n++}`;
+  return id;
+}
+
+/** Converts a legacy channel only in memory. Nothing on disk changes until Save. */
+function creatorDraftFrom(channel) {
+  const draft = structuredClone(channel || newCreatorDraft());
+  draft.content ||= [];
+  draft.dayparts ||= [];
+  draft.pools ||= [];
+  draft.defaultPoolIds ||= [];
+  if (draft.pools.length) return draft;
+
+  const used = new Set();
+  const mainId = uniqueLocalId("main", used); used.add(mainId);
+  const main = {
+    id: mainId, name: "Main lineup", content: draft.content || [], excluded: [],
+    refreshHours: draft.refreshHours || 168,
+    ...(draft.source ? { source: draft.source } : {}),
+  };
+  draft.pools = [main];
+  draft.defaultPoolIds = [mainId];
+  draft.content = [];
+  delete draft.source;
+
+  draft.dayparts = draft.dayparts.map((block) => {
+    if (!block.content?.length) return block;
+    const id = uniqueLocalId(block.name, used); used.add(id);
+    draft.pools.push({ id, name: `${block.name} lineup`, content: block.content, excluded: [], refreshHours: 168 });
+    const next = { ...block, poolIds: [id] };
+    delete next.content;
+    return next;
+  });
+  return draft;
+}
+
+async function openCreator(id, initialDraft = null) {
+  await Promise.all([loadSourceMeta(), loadMetadataOptions()]);
+  if (!state.channels.length) await loadChannels();
+  const found = state.channels.find((channel) => channel.id === id);
+  let draft = creatorDraftFrom(initialDraft || found || null);
+  const stored = localStorage.getItem(CREATOR_KEY(id));
+  if (!initialDraft && stored && confirm("Resume your unsaved channel-creator draft? Press Cancel to discard it.")) {
+    try { draft = JSON.parse(stored); } catch {}
+  } else if (stored && !initialDraft) {
+    localStorage.removeItem(CREATOR_KEY(id));
+  }
+
+  state.creator = {
+    step: 0, editing: id, draft, poolId: draft.pools[0]?.id || null,
+    preview: null, matches: {}, similar: null, jsonMode: false,
+  };
+  $("#creator-title").textContent = found ? `Edit ${found.name}` : "Create channel";
+  renderCreator();
+  creator.showModal();
+}
+
+async function loadMetadataOptions() {
+  if (state.metadata) return state.metadata;
+  try {
+    state.metadata = await api("/api/metadata/options");
+  } catch {
+    state.metadata = { configured:false, genres:{movie:[],series:[]}, languages:[], countries:[], networks:[] };
+  }
+  return state.metadata;
+}
+
+function persistCreator() {
+  localStorage.setItem(CREATOR_KEY(state.creator.editing), JSON.stringify(state.creator.draft));
+  $("#creator-saved").textContent = "Draft saved in this browser";
+}
+
+function closeCreator() {
+  persistCreator();
+  creator.close();
+}
+
+function creatorSet(fn, rerender = false) {
+  fn(state.creator.draft);
+  state.creator.preview = null;
+  persistCreator();
+  if (rerender) renderCreator();
+}
+
+function renderCreator() {
+  state.creator.jsonMode = false;
+  const steps = $("#creator-steps");
+  steps.textContent = "";
+  CREATOR_STEPS.forEach((name, index) => steps.append(el("button", {
+    className: `act${index === state.creator.step ? " on" : ""}`,
+    textContent: `${index + 1}. ${name}`,
+    onclick: () => { state.creator.step = index; renderCreator(); },
+  })));
+  const body = $("#creator-body");
+  body.textContent = "";
+  [renderCreatorBasics, renderCreatorPools, renderCreatorSchedule, renderCreatorReview][state.creator.step](body);
+  $("#creator-back").hidden = state.creator.step === 0;
+  $("#creator-next").textContent = state.creator.step === CREATOR_STEPS.length - 1 ? "Save channel" : "Next";
+}
+
+function creatorMove(direction) {
+  if (direction > 0 && state.creator.step === CREATOR_STEPS.length - 1) return saveCreator();
+  state.creator.step = Math.max(0, Math.min(CREATOR_STEPS.length - 1, state.creator.step + direction));
+  renderCreator();
+}
+
+function labeled(label, control, note = "") {
+  return el("label", { style:"display:block;margin:9px 0" }, [
+    el("div", { className:"muted", textContent:label, style:"margin-bottom:4px" }),
+    control,
+    ...(note ? [el("div", { className:"muted", textContent:note, style:"margin-top:3px" })] : []),
+  ]);
+}
+
+function renderCreatorBasics(body) {
+  const draft = state.creator.draft;
+  const idInput = el("input", { type:"text", value:draft.id, placeholder:"late-night-horror", style:"width:100%" });
+  idInput.disabled = Boolean(state.creator.editing);
+  idInput.oninput = (event) => creatorSet((d) => d.id = event.target.value.trim().toLowerCase());
+  const nameInput = el("input", { type:"text", value:draft.name, placeholder:"Late Night Horror", style:"width:100%" });
+  nameInput.oninput = (event) => creatorSet((d) => d.name = event.target.value);
+  const descInput = el("input", { type:"text", value:draft.description || "", placeholder:"What kind of channel is this?", style:"width:100%" });
+  descInput.oninput = (event) => creatorSet((d) => d.description = event.target.value || undefined);
+  body.append(el("div", { className:"section-box" }, [
+    el("h3", { textContent:"Channel identity" }),
+    el("p", { className:"muted", textContent:"Give it a readable name. The technical id is used in URLs and cannot change after creation." }),
+    labeled("Channel name", nameInput), labeled("Channel id", idInput), labeled("Description", descInput),
+  ]));
+  if (state.creator.editing) body.append(el("button", {
+    className:"act danger", textContent:"Delete this channel",
+    onclick: deleteCreatorChannel,
+  }));
+}
+
+function currentCreatorPool() {
+  return state.creator.draft.pools.find((pool) => pool.id === state.creator.poolId) || state.creator.draft.pools[0];
+}
+
+function renderCreatorPools(body) {
+  const draft = state.creator.draft;
+  const grid = el("div", { className:"pool-grid" });
+  const list = el("div", { className:"pool-list" }, [
+    el("h3", { textContent:"Content pools" }),
+    el("p", { className:"muted", textContent:"Reusable groups of films and shows." }),
+  ]);
+  for (const pool of draft.pools) list.append(el("button", {
+    className:`act${pool.id === state.creator.poolId ? " on" : ""}`,
+    textContent:`${pool.name} · ${pool.content.length} pinned${pool.source ? " + live rule" : ""}`,
+    onclick:() => { state.creator.poolId = pool.id; renderCreator(); },
+  }));
+  list.append(el("button", { className:"act primary", textContent:"+ Add pool", onclick:addCreatorPool }));
+  grid.append(list);
+
+  const pool = currentCreatorPool();
+  const editor = el("div");
+  if (!pool) {
+    editor.append(el("p", { className:"muted", textContent:"Add a content pool to continue." }));
+  } else {
+    const name = el("input", { type:"text", value:pool.name, style:"flex:1" });
+    name.oninput = (event) => creatorSet(() => pool.name = event.target.value);
+    editor.append(el("div", { className:"row spread" }, [
+      el("div", { className:"row", style:"flex:1" }, [name, el("span", { className:"pill", textContent:pool.id })]),
+      ...(draft.pools.length > 1 ? [el("button", { className:"act danger", textContent:"Remove pool", onclick:() => removeCreatorPool(pool.id) })] : []),
+    ]));
+    editor.append(renderCreatorSourcePicker(pool));
+    editor.append(renderPinnedContent(pool));
+    if (state.creator.similar?.poolId === pool.id) {
+      editor.append(renderSimilarSuggestions(pool, state.creator.similar));
+    }
+    const matches = state.creator.matches[pool.id];
+    if (matches) editor.append(renderMatchCards(pool, matches));
+  }
+  grid.append(editor);
+  body.append(grid);
+}
+
+function addCreatorPool() {
+  const draft = state.creator.draft;
+  const used = new Set(draft.pools.map((pool) => pool.id));
+  const id = uniqueLocalId("new-pool", used);
+  draft.pools.push({ id, name:"New pool", content:[], excluded:[], refreshHours:168 });
+  state.creator.poolId = id;
+  persistCreator(); renderCreator();
+}
+
+function removeCreatorPool(id) {
+  const draft = state.creator.draft;
+  draft.pools = draft.pools.filter((pool) => pool.id !== id);
+  draft.defaultPoolIds = draft.defaultPoolIds.filter((poolId) => poolId !== id);
+  for (const block of draft.dayparts) if (block.poolIds) block.poolIds = block.poolIds.filter((poolId) => poolId !== id);
+  if (state.creator.similar?.poolId === id) state.creator.similar = null;
+  state.creator.poolId = draft.pools[0]?.id || null;
+  persistCreator(); renderCreator();
+}
+
+function renderCreatorSourcePicker(pool) {
+  const wrap = el("div", { className:"section-box" }, [
+    el("h3", { textContent:"Automatic content" }),
+    el("p", { className:"muted", textContent:"Optional. A live rule refreshes weekly; pinned titles below always remain." }),
+  ]);
+  const select = el("select");
+  select.append(el("option", { value:"", textContent:"No rule — hand-picked only" }));
+  for (const kind of state.sources.kinds) select.append(el("option", {
+    value:kind.kind,
+    textContent:(KIND_LABELS[kind.kind] || kind.kind) + (kind.available ? "" : ` (needs ${kind.requires})`),
+    disabled:!kind.available,
+  }));
+  select.value = pool.source?.kind || "";
+  select.onchange = (event) => {
+    const kind = event.target.value;
+    if (!kind) delete pool.source;
+    else if (kind === "rule") pool.source = { kind, type:"movie", genres:[], limit:50 };
+    else if (kind === "tmdb") pool.source = {
+      kind, type:"movie", includeGenres:[], excludeGenres:[], languages:[], countries:[],
+      companies:[], networks:[], includeKeywords:[], excludeKeywords:[], sort:"popularity", limit:50,
+    };
+    else if (kind === "stremio") pool.source = { kind, include:"all", limit:100 };
+    else pool.source = { kind, url:"", limit:100 };
+    state.creator.matches[pool.id] = null;
+    persistCreator(); renderCreator();
+  };
+  wrap.append(select);
+  if (pool.source) wrap.append(renderCreatorSourceFields(pool));
+  return wrap;
+}
+
+function renderCreatorSourceFields(pool) {
+  const source = pool.source;
+  const wrap = el("div", { style:"margin-top:10px" });
+  if (source.kind === "rule") renderBasicRule(wrap, source);
+  else if (source.kind === "tmdb") renderTmdbRule(wrap, source, pool);
+  else if (source.kind === "stremio") {
+    const pick = el("select", {}, [
+      el("option", { value:"all", textContent:"Everything" }),
+      el("option", { value:"library", textContent:"Saved library" }),
+      el("option", { value:"watchlist", textContent:"Recently opened" }),
+    ]);
+    pick.value = source.include || "all";
+    pick.onchange = (event) => creatorSet(() => source.include = event.target.value);
+    wrap.append(labeled("Include", pick));
+  } else {
+    const url = el("input", { type:"text", value:source.url || "", style:"width:100%", placeholder:source.kind === "trakt" ? "Trakt list URL" : "MDBList URL" });
+    url.oninput = (event) => creatorSet(() => source.url = event.target.value.trim());
+    wrap.append(labeled("List URL", url));
+  }
+  const refresh = el("input", { type:"number", min:1, value:pool.refreshHours || 168, style:"width:90px" });
+  refresh.onchange = (event) => creatorSet(() => pool.refreshHours = Number(event.target.value) || 168);
+  wrap.append(el("div", { className:"row" }, [
+    el("button", { className:"act", textContent:"Preview matches", onclick:() => previewCreatorPool(pool) }),
+    el("span", { className:"muted", textContent:"Refresh every" }), refresh,
+    el("span", { className:"muted", textContent:"hours" }),
+  ]));
+  return wrap;
+}
+
+function renderBasicRule(wrap, source) {
+  const type = el("select", {}, [el("option", {value:"movie",textContent:"Movies"}),el("option", {value:"series",textContent:"TV series"})]);
+  type.value = source.type;
+  type.onchange = (event) => { source.type = event.target.value; source.genres = []; persistCreator(); renderCreator(); };
+  wrap.append(el("div", { className:"row" }, [type, numberField(source,"minRating","minimum rating",0.1), yearFields(source), numberField(source,"limit","maximum titles",1)]));
+  const chips = el("div", { className:"row", style:"margin-top:8px" }, [el("span", {className:"muted",textContent:"Genres"})]);
+  for (const genre of state.sources.genres[source.type] || []) chips.append(toggleChip(genre, source.genres.includes(genre), () => {
+    source.genres = source.genres.includes(genre) ? source.genres.filter((item) => item !== genre) : [...source.genres, genre];
+  }));
+  wrap.append(chips);
+}
+
+function numberField(object, key, placeholder, step = 1) {
+  const input = el("input", { type:"number", step, value:object[key] ?? "", placeholder, style:"width:110px" });
+  input.onchange = (event) => creatorSet(() => {
+    const value = Number(event.target.value);
+    if (event.target.value !== "" && Number.isFinite(value)) object[key] = value; else delete object[key];
+  });
+  return input;
+}
+
+function yearFields(source) {
+  const row = el("span", { className:"row" });
+  for (const index of [0,1]) {
+    const input = el("input", { type:"number", value:source.years?.[index] ?? "", placeholder:index ? "to year" : "from year", style:"width:90px" });
+    input.onchange = (event) => creatorSet(() => {
+      const value = Number(event.target.value);
+      const years = source.years || [1900, new Date().getFullYear()];
+      years[index] = value || (index ? new Date().getFullYear() : 1900);
+      source.years = years;
+    });
+    row.append(input);
+  }
+  return row;
+}
+
+function toggleChip(text, on, change) {
+  return el("button", {
+    className:"act", textContent:text,
+    style:on ? "border-color:var(--accent);color:var(--accent)" : "",
+    onclick:() => { change(); persistCreator(); renderCreator(); },
+  });
+}
+
+function renderTmdbRule(wrap, source, pool) {
+  const type = el("select", {}, [el("option", {value:"movie",textContent:"Movies"}),el("option", {value:"series",textContent:"TV series"})]);
+  type.value = source.type;
+  type.onchange = (event) => { source.type = event.target.value; source.includeGenres=[]; source.excludeGenres=[]; if (source.type === "movie") source.networks=[]; persistCreator(); renderCreator(); };
+  const sort = el("select", {}, [
+    el("option", {value:"popularity",textContent:"Most popular first"}),
+    el("option", {value:"rating",textContent:"Highest rated first"}),
+    el("option", {value:"newest",textContent:"Newest first"}),
+  ]); sort.value=source.sort; sort.onchange=(event)=>creatorSet(()=>source.sort=event.target.value);
+  wrap.append(el("div", { className:"row" }, [type, sort, yearFields(source), numberField(source,"minRating","rating ≥",0.1), numberField(source,"minVotes","votes ≥",1), numberField(source,"limit","max titles",1)]));
+  const runtime = el("div", { className:"row", style:"margin-top:8px" }, [el("span", {className:"muted",textContent:"Runtime minutes"})]);
+  for (const index of [0,1]) {
+    const input=el("input", {type:"number",value:source.runtime?.[index]??"",placeholder:index?"maximum":"minimum",style:"width:95px"});
+    input.onchange=(event)=>creatorSet(()=>{ const pair=source.runtime||[1,240]; pair[index]=Number(event.target.value)||(index?240:1); source.runtime=pair; });
+    runtime.append(input);
+  }
+  wrap.append(runtime);
+  const genres = state.metadata.genres[source.type] || [];
+  wrap.append(namedChipRows("Include genres", genres, source.includeGenres), namedChipRows("Exclude genres", genres, source.excludeGenres));
+  wrap.append(selectTokenRow("Languages", state.metadata.languages.map((item)=>({id:item.code,name:item.name})), source.languages, true));
+  wrap.append(selectTokenRow("Countries", state.metadata.countries.map((item)=>({id:item.code,name:item.name})), source.countries, true));
+  if (source.type === "series") wrap.append(namedSearchRow(pool, "Networks", "network", "networks"));
+  wrap.append(namedSearchRow(pool, source.type === "movie" ? "Studios" : "Production companies", "company", "companies"));
+  wrap.append(namedSearchRow(pool, "Include keywords", "keyword", "includeKeywords"));
+  wrap.append(namedSearchRow(pool, "Exclude keywords", "keyword", "excludeKeywords"));
+  if (!state.metadata.configured) wrap.append(el("p", { className:"muted", style:"color:var(--warn)", textContent:"TMDB is not configured. Add tmdbReadAccessToken or tmdbApiKey to config.json to enable these filters." }));
+}
+
+function namedChipRows(label, options, selected) {
+  const row=el("div", {className:"row",style:"margin-top:8px"}, [el("span",{className:"muted",textContent:label})]);
+  for (const option of options) row.append(toggleChip(option.name, selected.some((item)=>item.id===option.id), ()=>{
+    const at=selected.findIndex((item)=>item.id===option.id); if(at>=0) selected.splice(at,1); else selected.push(option);
+  }));
+  return row;
+}
+
+function selectTokenRow(label, options, selected, primitive=false) {
+  const row=el("div", {className:"row",style:"margin-top:8px"}, [el("span",{className:"muted",textContent:label})]);
+  for(const item of selected) row.append(el("button", {className:"act",textContent:(options.find((o)=>o.id===item)?.name||item)+" ×",onclick:()=>{
+    selected.splice(selected.indexOf(item),1); persistCreator(); renderCreator();
+  }}));
+  const pick=el("select",{},[el("option",{value:"",textContent:"+ add"})]);
+  for(const option of options.filter((option)=>!selected.includes(option.id))) pick.append(el("option",{value:option.id,textContent:option.name}));
+  pick.onchange=(event)=>{ if(event.target.value){selected.push(event.target.value);persistCreator();renderCreator();} };
+  row.append(pick); return row;
+}
+
+function namedSearchRow(pool, label, kind, key) {
+  const source=pool.source, row=el("div",{style:"margin-top:8px"});
+  const chips=el("div",{className:"row"},[el("span",{className:"muted",textContent:label})]);
+  for(const item of source[key]) chips.append(el("button",{className:"act",textContent:`${item.name} ×`,onclick:()=>{
+    source[key]=source[key].filter((entry)=>entry.id!==item.id);persistCreator();renderCreator();
+  }}));
+  const input=el("input",{type:"text",placeholder:`Search ${label.toLowerCase()}...`,style:"width:220px"});
+  const results=el("div",{className:"results"});
+  let timer;
+  input.oninput=()=>{clearTimeout(timer);const q=input.value.trim();if(!q){results.textContent="";return;}timer=setTimeout(async()=>{
+    try{
+      let found=(await api(`/api/metadata/search?kind=${kind}&q=${encodeURIComponent(q)}`)).results;
+      if(kind==="network"&&/^\d+$/.test(q)) found=[{id:Number(q),name:`TMDB network ${q}`},...found];
+      results.textContent="";
+      for(const item of found) results.append(el("div",{className:"result",textContent:item.name,onclick:()=>{
+        if(!source[key].some((entry)=>entry.id===item.id)) source[key].push(item);
+        persistCreator();renderCreator();
+      }}));
+    }catch(err){results.textContent=err.message;}
+  },250);};
+  chips.append(input); row.append(chips,results); return row;
+}
+
+function renderPinnedContent(pool) {
+  const wrap=el("div",{className:"section-box"},[
+    el("h3",{textContent:"Pinned titles"}),
+    el("p",{className:"muted",textContent:"These always stay in the pool, even when a live rule refreshes. Airtime weight only applies wherever this pool uses Weighted playback; 2 gets roughly twice the selection share of 1."}),
+  ]);
+  const input=el("input",{type:"text",placeholder:"Search films and shows...",style:"width:100%"});
+  const results=el("div",{className:"results"}); let timer;
+  input.oninput=()=>{clearTimeout(timer);const q=input.value.trim();if(q.length<2){results.textContent="";return;}timer=setTimeout(async()=>{
+    const data=await api(`/api/search?q=${encodeURIComponent(q)}`);results.textContent="";
+    for(const item of data.results) results.append(el("div",{className:"result"},[
+      el("img",{src:item.poster||"",alt:""}),el("div",{},[el("div",{textContent:item.name}),el("div",{className:"muted",textContent:`${item.type} · ${item.year}`})]),
+    ]));
+    [...results.children].forEach((node,index)=>node.onclick=()=>{
+      const item=data.results[index];
+      if(!pool.content.some((entry)=>entry.id===item.id)) pool.content.push({type:item.type,id:item.id,name:item.name});
+      pool.excluded=pool.excluded.filter((entry)=>entry.id!==item.id);persistCreator();renderCreator();
+    });
+  },300);};
+  wrap.append(input,results);
+  if(pool.content.length){
+    const table=el("table",{},[el("thead",{},[el("tr",{},[
+      el("th",{textContent:"Title"}),el("th",{textContent:"Type"}),
+      el("th",{textContent:"Airtime weight"}),el("th",{textContent:"Actions"}),
+    ])])]); const body=el("tbody");
+    pool.content.forEach((item,index)=>body.append(el("tr",{},[
+      el("td",{textContent:item.name||item.id}),el("td",{className:"muted",textContent:item.type}),
+      el("td",{},[Object.assign(el("input",{type:"number",min:1,max:100,value:item.weight||1,style:"width:65px",title:"Relative airtime under Weighted playback only","aria-label":`Airtime weight for ${item.name||item.id}`}),{onchange:(event)=>{const n=Number(event.target.value);if(n>1)item.weight=Math.min(100,n);else delete item.weight;persistCreator();}})]),
+      el("td",{},[
+        el("button",{className:"act",textContent:"Find similar",disabled:!state.metadata?.configured,title:state.metadata?.configured?`Find titles like ${item.name||item.id}`:"Configure TMDB to find similar titles",onclick:()=>findSimilarContent(pool,item)}),
+        el("button",{className:"act",textContent:"×",title:"Remove from pool",onclick:()=>{pool.content.splice(index,1);persistCreator();renderCreator();}}),
+      ]),
+    ]))); table.append(body); wrap.append(table);
+  }
+  if(pool.excluded.length) wrap.append(el("div",{className:"row",style:"margin-top:8px"},[
+    el("span",{className:"muted",textContent:"Excluded:"}),...pool.excluded.map((item)=>el("button",{className:"act",textContent:`${item.name||item.id} ×`,onclick:()=>{pool.excluded=pool.excluded.filter((entry)=>entry.id!==item.id);persistCreator();renderCreator();}})),
+  ]));
+  return wrap;
+}
+
+async function findSimilarContent(pool, seed) {
+  const request = {
+    poolId: pool.id, seed: {type:seed.type,id:seed.id,name:seed.name||seed.id},
+    loading: true, titles: [], selected: [], error: null, skipped: 0,
+  };
+  state.creator.similar = request;
+  renderCreator();
+  try {
+    const data = await api(`/api/metadata/similar?type=${seed.type}&id=${encodeURIComponent(seed.id)}`);
+    if (state.creator.similar !== request) return;
+    Object.assign(request, {loading:false,titles:data.titles,skipped:data.skipped||0});
+  } catch (err) {
+    if (state.creator.similar !== request) return;
+    Object.assign(request, {loading:false,error:err.message});
+  }
+  renderCreator();
+}
+
+function renderSimilarSuggestions(pool, similar) {
+  const selected = new Set(similar.selected);
+  const pinned = new Set(pool.content.map((item)=>`${item.type}:${item.id}`));
+  const wrap = el("div",{className:"section-box"},[
+    el("div",{className:"row spread"},[
+      el("h3",{textContent:`More like ${similar.seed.name}`}),
+      el("button",{className:"act",textContent:"Close",onclick:()=>{state.creator.similar=null;renderCreator();}}),
+    ]),
+    el("p",{className:"muted",textContent:"TMDB recommendations come first, followed by additional genre and keyword matches. Select any number to pin them in this pool."}),
+  ]);
+  if (similar.loading) {
+    wrap.append(el("p",{className:"muted",textContent:"Finding related titles…"}));
+    return wrap;
+  }
+  if (similar.error) {
+    wrap.append(el("p",{style:"color:var(--danger)",textContent:similar.error}),el("button",{className:"act",textContent:"Try again",onclick:()=>findSimilarContent(pool,similar.seed)}));
+    return wrap;
+  }
+  if (!similar.titles.length) {
+    wrap.append(el("p",{className:"muted",textContent:"TMDB did not return any usable IMDb-linked titles."}));
+    return wrap;
+  }
+
+  const grid=el("div",{className:"poster-grid"});
+  for(const item of similar.titles){
+    const key=`${item.type}:${item.id}`, already=pinned.has(key), isSelected=selected.has(key);
+    const reason=(item.reasons||[]).length>1?"Recommended + similar":item.reasons?.[0]==="recommendation"?"Recommended":"Similar";
+    grid.append(el("div",{className:"poster-card",style:isSelected?"border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)":""},[
+      el("img",{src:item.poster||"",alt:"",loading:"lazy"}),
+      el("div",{className:"title",textContent:item.name,title:item.name}),
+      el("div",{className:"muted",textContent:[item.year,item.rating,reason].filter(Boolean).join(" · ")}),
+      el("button",{className:"act",disabled:already,textContent:already?"Already pinned":isSelected?"Selected ✓":"Select",onclick:()=>{
+        similar.selected=isSelected?similar.selected.filter((entry)=>entry!==key):[...similar.selected,key];renderCreator();
+      }}),
+    ]));
+  }
+  const availableSelected=similar.selected.filter((key)=>!pinned.has(key));
+  wrap.append(grid,el("div",{className:"row",style:"margin-top:10px"},[
+    el("button",{className:"act primary",disabled:!availableSelected.length,textContent:`Add selected (${availableSelected.length})`,onclick:()=>addSelectedSimilar(pool,similar)}),
+    ...(similar.skipped?[el("span",{className:"muted",textContent:`${similar.skipped} TMDB results had no usable IMDb id`})]:[]),
+  ]));
+  return wrap;
+}
+
+function addSelectedSimilar(pool, similar) {
+  const chosen=new Set(similar.selected), existing=new Set(pool.content.map((item)=>`${item.type}:${item.id}`));
+  let added=0;
+  for(const item of similar.titles){
+    const key=`${item.type}:${item.id}`;
+    if(!chosen.has(key)||existing.has(key))continue;
+    pool.content.push({type:item.type,id:item.id,name:item.name});existing.add(key);added++;
+    pool.excluded=pool.excluded.filter((entry)=>`${entry.type}:${entry.id}`!==key);
+  }
+  similar.selected=[];
+  persistCreator();renderCreator();toast(`${added} title${added===1?"":"s"} added to ${pool.name}`);
+}
+
+async function previewCreatorPool(pool) {
+  try {
+    const data=await api("/api/sources/preview",{method:"POST",body:JSON.stringify(pool.source)});
+    state.creator.matches[pool.id]=data.titles; renderCreator();
+  } catch(err) { toast(err.message,true); }
+}
+
+function renderMatchCards(pool, matches) {
+  const excluded=new Set(pool.excluded.map((item)=>item.id));
+  const wrap=el("div",{className:"section-box"},[el("h3",{textContent:`Rule preview · ${matches.length} matches`})]);
+  const grid=el("div",{className:"poster-grid"});
+  for(const item of matches.slice(0,80)) grid.append(el("div",{className:"poster-card",style:excluded.has(item.id)?"opacity:.45":""},[
+    el("img",{src:item.poster||"",alt:"",loading:"lazy"}),el("div",{className:"title",textContent:item.name,title:item.name}),
+    el("div",{className:"muted",textContent:[item.year,item.rating,item.votes?`${item.votes} votes`:null].filter(Boolean).join(" · ")}),
+    el("button",{className:"act",textContent:excluded.has(item.id)?"Include":"Exclude",onclick:()=>{
+      if(excluded.has(item.id)) pool.excluded=pool.excluded.filter((entry)=>entry.id!==item.id);
+      else pool.excluded.push({type:item.type,id:item.id,name:item.name});
+      persistCreator();renderCreator();
+    }}),
+  ]));
+  wrap.append(grid); return wrap;
+}
+
+function renderCreatorSchedule(body) {
+  const draft=state.creator.draft;
+  const order=el("div",{className:"section-box"},[el("h3",{textContent:"Default playback order"})]);
+  const choices=[
+    ["sequential","Rotate shows; keep episodes in order"],
+    ["shuffle","Mix every episode in one no-repeat shuffle"],
+    ["weighted","Favor selected titles; keep episodes in order"],
+  ];
+  for(const [value,label] of choices) order.append(toggleChip(label,draft.strategy===value,()=>draft.strategy=value));
+  const seed=el("input",{type:"number",value:draft.seed,style:"width:90px"});seed.onchange=(event)=>creatorSet((d)=>d.seed=Number(event.target.value)||1);
+  order.append(el("div",{className:"row",style:"margin-top:10px"},[el("span",{className:"muted",textContent:"Reshuffle seed"}),seed]));
+  order.append(poolCheckboxes("Default content outside scheduled blocks",draft.defaultPoolIds,(ids)=>draft.defaultPoolIds=ids));
+  body.append(order);
+
+  const blocks=el("div",{className:"section-box"},[
+    el("div",{className:"row spread"},[el("h3",{textContent:"What plays when"}),el("div",{className:"row"},[
+      quickBlockButton("Morning","06:00","12:00"),quickBlockButton("Afternoon","12:00","18:00"),quickBlockButton("Prime time","18:00","22:00"),quickBlockButton("Late night","22:00","02:00"),
+    ])]),
+    el("p",{className:"muted",textContent:"Blocks repeat on selected days. Hours not covered use the default pools above."}),
+  ]);
+  draft.dayparts.forEach((block,index)=>blocks.append(renderCreatorBlock(block,index)));
+  if(!draft.dayparts.length) blocks.append(el("p",{className:"muted",textContent:"No scheduled blocks yet — the default plays all day."}));
+  const overlap=creatorOverlap(draft.dayparts);
+  if(overlap) blocks.append(el("p",{style:"color:var(--danger)",textContent:overlap}));
+  blocks.append(renderWeekBars(draft.dayparts)); body.append(blocks);
+}
+
+function poolCheckboxes(label, selected, set) {
+  const wrap=el("div",{style:"margin-top:10px"},[el("div",{className:"muted",textContent:label})]);
+  const row=el("div",{className:"row",style:"margin-top:5px"});
+  for(const pool of state.creator.draft.pools) row.append(toggleChip(pool.name,selected.includes(pool.id),()=>{
+    const next=selected.includes(pool.id)?selected.filter((id)=>id!==pool.id):[...selected,pool.id];set(next);
+  }));
+  wrap.append(row);return wrap;
+}
+
+function quickBlockButton(name,start,end) { return el("button",{className:"act",textContent:`+ ${name}`,onclick:()=>{
+  const pools=[...(state.creator.draft.defaultPoolIds.length?state.creator.draft.defaultPoolIds:[state.creator.draft.pools[0]?.id].filter(Boolean))];
+  state.creator.draft.dayparts.push({name,start,end,days:[...DAY_NAMES],poolIds:pools});persistCreator();renderCreator();
+}}); }
+
+function renderCreatorBlock(block,index) {
+  block.days ||= [...DAY_NAMES]; block.poolIds ||= [...state.creator.draft.defaultPoolIds];
+  const box=el("div",{className:"daypart"});
+  const name=el("input",{type:"text",value:block.name,style:"flex:1"});name.oninput=(event)=>creatorSet(()=>block.name=event.target.value);
+  const start=el("input",{type:"text",value:block.start,style:"width:80px"});start.onchange=(event)=>creatorSet(()=>block.start=event.target.value,true);
+  const end=el("input",{type:"text",value:block.end,style:"width:80px"});end.onchange=(event)=>creatorSet(()=>block.end=event.target.value,true);
+  const strategy=el("select",{},[
+    el("option",{value:"",textContent:"Inherit order"}),el("option",{value:"sequential",textContent:"Episodes in order"}),el("option",{value:"shuffle",textContent:"Shuffle episodes"}),el("option",{value:"weighted",textContent:"Weighted"}),
+  ]);strategy.value=block.strategy||"";strategy.onchange=(event)=>creatorSet(()=>{if(event.target.value)block.strategy=event.target.value;else delete block.strategy;});
+  box.append(el("div",{className:"row"},[name,start,end,strategy,el("button",{className:"act danger",textContent:"×",onclick:()=>{state.creator.draft.dayparts.splice(index,1);persistCreator();renderCreator();}})]));
+  const days=el("div",{className:"row",style:"margin-top:8px"},[el("span",{className:"muted",textContent:"Days"})]);
+  for(const day of DAY_NAMES) days.append(toggleChip(DAY_LABELS[day],block.days.includes(day),()=>{
+    block.days=block.days.includes(day)?block.days.filter((item)=>item!==day):[...block.days,day];
+  }));
+  days.append(el("button",{className:"act",textContent:"Weekdays",onclick:()=>{block.days=DAY_NAMES.slice(0,5);persistCreator();renderCreator();}}),el("button",{className:"act",textContent:"Weekend",onclick:()=>{block.days=DAY_NAMES.slice(5);persistCreator();renderCreator();}}));
+  box.append(days,poolCheckboxes("Content pools",block.poolIds,(ids)=>block.poolIds=ids)); return box;
+}
+
+function renderWeekBars(dayparts) {
+  const wrap=el("div",{style:"margin-top:12px"});
+  DAY_NAMES.forEach((day,dayIndex)=>wrap.append(el("div",{className:"week-row"},[
+    el("span",{className:"muted",textContent:day.toUpperCase()}),dayBar(dayparts,dayIndex),
+  ]))); return wrap;
+}
+
+function dayBar(dayparts,dayIndex) {
+  const owner=new Array(1440).fill(-1), mins=(value)=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
+  dayparts.forEach((block,index)=>{
+    const days=block.days?.length?block.days:DAY_NAMES, start=mins(block.start), end=mins(block.end);
+    for(const anchor of days){const anchorIndex=DAY_NAMES.indexOf(anchor);if(start===end&&anchorIndex===dayIndex)owner.fill(index);else if(start<end&&anchorIndex===dayIndex){for(let m=start;m<end;m++)if(owner[m]<0)owner[m]=index;}else if(start>end){if(anchorIndex===dayIndex)for(let m=start;m<1440;m++)if(owner[m]<0)owner[m]=index;if((anchorIndex+1)%7===dayIndex)for(let m=0;m<end;m++)if(owner[m]<0)owner[m]=index;}}
+  });
+  const bar=el("div",{className:"bar"});let cursor=0;
+  while(cursor<1440){const who=owner[cursor];let run=1;while(cursor+run<1440&&owner[cursor+run]===who)run++;bar.append(el("div",{style:`width:${run/14.4}%;${who<0?"background:var(--panel-2)":`background:hsl(${[200,280,340,40,120,170][who%6]} 55% 40%)`}`,title:who<0?"default":dayparts[who].name,textContent:run>150&&who>=0?dayparts[who].name:""}));cursor+=run;}
+  return bar;
+}
+
+function creatorOverlap(dayparts) {
+  const marks=Array.from({length:7},()=>new Int16Array(1440).fill(-1));
+  const mins=(value)=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value)?Number(value.slice(0,2))*60+Number(value.slice(3,5)):null;
+  for(let index=0;index<dayparts.length;index++){
+    const block=dayparts[index],start=mins(block.start),end=mins(block.end);if(start===null||end===null)return `${block.name}: use HH:MM times`;
+    if(!block.days?.length)return `${block.name}: choose at least one day`;
+    if(!block.poolIds?.length)return `${block.name}: choose at least one content pool`;
+    for(const day of block.days){const d=DAY_NAMES.indexOf(day), spans=start===end?[[d,0,1440]]:start<end?[[d,start,end]]:[[d,start,1440],[(d+1)%7,0,end]];for(const [which,a,b] of spans)for(let m=a;m<b;m++){if(marks[which][m]>=0)return `${block.name} overlaps ${dayparts[marks[which][m]].name}`;marks[which][m]=index;}}
+  }
+  return null;
+}
+
+function renderCreatorReview(body) {
+  const draft=state.creator.draft;
+  body.append(el("div",{className:"section-box"},[
+    el("h3",{textContent:draft.name||"Unnamed channel"}),
+    el("p",{className:"muted",textContent:`${draft.pools.length} pools · ${draft.dayparts.length} scheduled blocks · ${STRATEGY_NOTES[draft.strategy]}`}),
+    el("button",{className:"act primary",textContent:"Preview next 12 hours",onclick:previewCreatorSchedule}),
+    el("span",{className:"muted",style:"margin-left:8px",textContent:"Metadata only — no TorBox calls"}),
+  ]));
+  if(state.creator.preview) body.append(renderCreatorPreview(state.creator.preview));
+}
+
+async function previewCreatorSchedule() {
+  try {
+    const payload=cleanCreatorPayload();
+    state.creator.preview=await api("/api/channels/preview",{method:"POST",body:JSON.stringify({channel:payload,hours:12})});
+    renderCreator();
+  }catch(err){toast(err.message,true);}
+}
+
+function renderCreatorPreview(data) {
+  const wrap=el("div",{className:"section-box"},[
+    el("div",{className:"muted",textContent:`${data.contentCount} titles · ${data.sourceCount} live-rule matches`}),
+  ]);
+  for(const warning of data.warnings) wrap.append(el("p",{className:"muted",style:"color:var(--warn)",textContent:warning}));
+  const table=el("table",{},[el("thead",{},[el("tr",{},[el("th",{textContent:"Starts"}),el("th",{textContent:"Program"}),el("th",{textContent:"Block"}),el("th",{textContent:"Runtime"})])])]);
+  const tbody=el("tbody");for(const item of data.programs)tbody.append(el("tr",{},[el("td",{className:"muted",textContent:fmtTime(item.start)}),el("td",{textContent:item.title}),el("td",{className:"muted",textContent:item.daypart||"default"}),el("td",{className:"muted",textContent:`${Math.round(item.duration/60000)} min · ${item.durationSource}`})]));table.append(tbody);wrap.append(table);return wrap;
+}
+
+function cleanCreatorPayload() {
+  const draft=structuredClone(state.creator.draft);
+  if(!/^[a-z0-9][a-z0-9-]*$/.test(draft.id))throw new Error("Channel id must use lowercase letters, numbers, and dashes");
+  if(!draft.name?.trim())throw new Error("Channel name is required");
+  if(!draft.pools.length)throw new Error("Add at least one content pool");
+  if(!draft.defaultPoolIds.length)throw new Error("Choose at least one default content pool");
+  const overlap=creatorOverlap(draft.dayparts);if(overlap)throw new Error(overlap);
+  const cleanRef=(item)=>({type:item.type,id:item.id,...(item.season?{season:item.season}:{}),...(item.episode?{episode:item.episode}:{}),...(item.weight>1?{weight:item.weight}:{})});
+  draft.content=[];delete draft.source;
+  draft.pools=draft.pools.map((pool)=>({
+    ...pool,content:pool.content.map(cleanRef),excluded:pool.excluded.map((item)=>({type:item.type,id:item.id})),
+  }));
+  draft.dayparts=draft.dayparts.map((block)=>{const clean={...block};delete clean.content;return clean;});
+  return draft;
+}
+
+async function saveCreator() {
+  let payload;try{payload=cleanCreatorPayload();}catch(err){return toast(err.message,true);}
+  for(const pool of payload.pools)if(!pool.content.length&&!pool.source)return toast(`${pool.name} needs pinned titles or an automatic rule`,true);
+  try{
+    const channels=state.creator.editing
+      ? state.channels.map((channel)=>channel.id===state.creator.editing?payload:stripUiNames(channel))
+      : [...state.channels.map(stripUiNames),payload];
+    await api("/api/channels",{method:"PUT",body:JSON.stringify({channels})});
+    localStorage.removeItem(CREATOR_KEY(state.creator.editing));creator.close();toast("Saved — preparing the current slot in the background");
+    await loadChannels();setTimeout(loadOps,500);
+  }catch(err){toast(err.message,true);}
+}
+
+function stripUiNames(channel) {
+  const copy=structuredClone(channel), clean=(item)=>{delete item.name;return item;};
+  copy.content?.forEach(clean);copy.pools?.forEach((pool)=>{pool.content?.forEach(clean);pool.excluded?.forEach(clean);});copy.dayparts?.forEach((block)=>block.content?.forEach(clean));return copy;
+}
+
+async function deleteCreatorChannel() {
+  if(!confirm(`Delete channel "${state.creator.editing}"?`))return;
+  await api("/api/channels",{method:"PUT",body:JSON.stringify({channels:state.channels.filter((channel)=>channel.id!==state.creator.editing).map(stripUiNames)})});
+  localStorage.removeItem(CREATOR_KEY(state.creator.editing));creator.close();toast("Deleted");loadChannels();
+}
+
+function showCreatorJson() {
+  state.creator.jsonMode=true;const body=$("#creator-body");body.textContent="";
+  const area=el("textarea",{value:JSON.stringify(state.creator.draft,null,2)});
+  body.append(el("p",{className:"muted",textContent:"Directly edit the complete draft. Apply validates JSON locally; the server performs final schema validation on save."}),area,el("div",{className:"row",style:"margin-top:8px"},[
+    el("button", { className:"act primary", textContent:"Apply JSON", onclick:() => {
+      try {
+        state.creator.draft = JSON.parse(area.value);
+        state.creator.poolId = state.creator.draft.pools?.[0]?.id || null;
+        persistCreator(); renderCreator();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    } }),
+    el("button",{className:"act",textContent:"Back to guided view",onclick:renderCreator}),
+  ]));
+}
+
+const editor = $("#editor");
+
+async function editChannel(id, initialDraft = null) {
+  await loadSourceMeta();
+  const found = state.channels.find((c) => c.id === id);
+  state.editing = id;
+  state.draft = initialDraft
+    ? structuredClone(initialDraft)
+    : found
+    ? structuredClone(found)
+    : { id: "", name: "", strategy: "shuffle", seed: Math.floor(Math.random() * 9999), content: [], dayparts: [] };
+
+  $("#editor-title").textContent = found
+    ? `Edit ${found.name}`
+    : initialDraft
+      ? `Customize ${state.draft.name}`
+      : "New channel";
+  $("#ch-id").value = state.draft.id;
+  $("#ch-id").disabled = Boolean(found);
+  $("#ch-name").value = state.draft.name;
+  $("#ch-desc").value = state.draft.description || "";
+  $("#ch-strategy").value = state.draft.strategy;
+  $("#ch-seed").value = state.draft.seed;
+  $("#delete-btn").hidden = !found;
+  $("#search").value = "";
+  $("#results").textContent = "";
+  $("#draft-preview").textContent = "";
+  renderStrategyNote();
+  renderSourceEditor();
+  renderContent();
+  renderDayparts();
+  editor.showModal();
+}
+
+function renderStrategyNote() {
+  $("#strategy-note").textContent = STRATEGY_NOTES[$("#ch-strategy").value] || "";
+}
+$("#ch-strategy").addEventListener("change", renderStrategyNote);
+
+function renderContent() {
+  const body = $("#content-table tbody");
+  body.textContent = "";
+  state.draft.content.forEach((entry, i) => {
+    body.append(
+      el("tr", {}, [
+        el("td", { textContent: entry.name || entry.id }),
+        el("td", { className: "muted", textContent: entry.type, style: "width:70px" }),
+        el("td", { style: "width:90px" }, [
+          Object.assign(el("input", {
+            type: "number", value: entry.weight ?? 1, min: 1, max: 100, style: "width:70px",
+            title: "Relative airtime (weighted strategy only)",
+          }), {
+            onchange: (e) => {
+              const w = Number(e.target.value);
+              if (w > 1) entry.weight = w; else delete entry.weight;
+            },
+          }),
+        ]),
+        el("td", { style: "width:40px" }, [
+          el("button", {
+            className: "act", textContent: "×",
+            onclick: () => { state.draft.content.splice(i, 1); renderContent(); },
+          }),
+        ]),
+      ]),
+    );
+  });
+}
+
+let searchTimer;
+$("#search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (q.length < 2) { $("#results").textContent = ""; return; }
+  searchTimer = setTimeout(async () => {
+    const { results } = await api("/api/search?q=" + encodeURIComponent(q));
+    const box = $("#results");
+    box.textContent = "";
+    for (const r of results) {
+      const row = el("div", { className: "result" }, [
+        el("img", { src: r.poster || "", loading: "lazy", alt: "" }),
+        el("div", {}, [
+          el("div", { textContent: r.name }),
+          el("div", { className: "muted", textContent: `${r.type} · ${r.year} · ${r.id}` }),
+        ]),
+      ]);
+      // TVmaze fills in the network lazily, so building an era-accurate lineup does
+      // not require looking each show up by hand.
+      if (r.type === "series") {
+        api("/api/lookup/" + r.id)
+          .then((info) => {
+            if (info?.network) {
+              row.querySelector(".muted").textContent =
+                `${r.type} · ${r.year} · ${info.network}`;
+            }
+          })
+          .catch(() => {});
+      }
+      row.onclick = () => {
+        if (!state.draft.content.some((c) => c.id === r.id)) {
+          state.draft.content.push({ type: r.type, id: r.id, name: r.name });
+          renderContent();
+        }
+        $("#search").value = "";
+        box.textContent = "";
+      };
+      box.append(row);
+    }
+  }, 300);
+});
+
+// ---------------------------------------------------------------- smart sources
+
+const KIND_LABELS = {
+  rule: "Rule — genre, years, rating (no setup needed)",
+  tmdb: "TMDB — rich metadata filters",
+  mdblist: "MDBList — import a list",
+  trakt: "Trakt — import a list",
+  stremio: "My Stremio library",
+};
+
+async function loadSourceMeta() {
+  if (!state.sources) state.sources = await api("/api/sources");
+  const picker = $("#src-kind");
+  picker.textContent = "";
+  picker.append(el("option", { value: "", textContent: "None - hand-picked only" }));
+  for (const k of state.sources.kinds) {
+    picker.append(
+      el("option", {
+        value: k.kind,
+        textContent: KIND_LABELS[k.kind] + (k.available ? "" : `  (needs ${k.requires})`),
+        disabled: !k.available,
+      }),
+    );
+  }
+  return state.sources;
+}
+
+function renderSourceEditor() {
+  const wrap = $("#src-editor");
+  const note = $("#src-note");
+  wrap.textContent = "";
+  note.textContent = "";
+
+  const src = state.draft.source;
+  $("#src-kind").value = src?.kind ?? "";
+  if (!src) return;
+
+  const set = (k, v) => { src[k] = v; };
+
+  if (src.kind === "rule") {
+    const genres = state.sources.genres[src.type] ?? [];
+    const box = el("div", { className: "daypart" });
+
+    const typeSel = Object.assign(el("select", {}, [
+      el("option", { value: "movie", textContent: "movies" }),
+      el("option", { value: "series", textContent: "series" }),
+    ]), { value: src.type, onchange: (e) => { set("type", e.target.value); src.genres = []; renderSourceEditor(); } });
+
+    box.append(el("div", { className: "row" }, [
+      el("span", { className: "muted", textContent: "Pick" }), typeSel,
+      el("span", { className: "muted", textContent: "rated at least" }),
+      Object.assign(el("input", { type: "number", step: "0.1", min: "0", max: "10", style: "width:70px",
+        value: src.minRating ?? "" }), {
+        placeholder: "any",
+        onchange: (e) => { const v = Number(e.target.value); if (v > 0) set("minRating", v); else delete src.minRating; },
+      }),
+      el("span", { className: "muted", textContent: "released" }),
+      Object.assign(el("input", { type: "number", style: "width:80px", value: src.years?.[0] ?? "" }), {
+        placeholder: "from",
+        onchange: (e) => { src.years = [Number(e.target.value) || 1900, src.years?.[1] ?? 2030]; },
+      }),
+      Object.assign(el("input", { type: "number", style: "width:80px", value: src.years?.[1] ?? "" }), {
+        placeholder: "to",
+        onchange: (e) => { src.years = [src.years?.[0] ?? 1900, Number(e.target.value) || 2030]; },
+      }),
+      el("span", { className: "muted", textContent: "max" }),
+      Object.assign(el("input", { type: "number", style: "width:70px", value: src.limit ?? 50 }), {
+        onchange: (e) => set("limit", Number(e.target.value) || 50),
+      }),
+    ]));
+
+    const chips = el("div", { className: "row", style: "margin-top:8px" });
+    chips.append(el("span", { className: "muted", textContent: "Genres:" }));
+    for (const g of genres) {
+      const on = src.genres.includes(g);
+      chips.append(el("span", {
+        className: "pill", textContent: g,
+        style: `cursor:pointer;${on ? "border-color:var(--accent);color:var(--accent)" : ""}`,
+        onclick: () => {
+          src.genres = on ? src.genres.filter((x) => x !== g) : [...src.genres, g];
+          renderSourceEditor();
+        },
+      }));
+    }
+    box.append(chips);
+    wrap.append(box);
+  } else if (src.kind === "tmdb") {
+    wrap.append(el("div", { className:"daypart" }, [
+      el("div", { className:"muted", textContent:"TMDB rules are edited in the guided creator so networks, studios, keywords, languages and exclusions stay readable." }),
+      el("button", { className:"act", textContent:"Open guided creator", style:"margin-top:8px", onclick:() => { editor.close(); openCreator(state.editing); } }),
+    ]));
+  } else if (src.kind === "stremio") {
+    wrap.append(el("div", { className: "daypart" }, [
+      el("div", { className: "row" }, [
+        el("span", { className: "muted", textContent: "Include" }),
+        Object.assign(el("select", {}, [
+          el("option", { value: "all", textContent: "everything" }),
+          el("option", { value: "library", textContent: "saved library only" }),
+          el("option", { value: "watchlist", textContent: "recently opened only" }),
+        ]), { value: src.include ?? "all", onchange: (e) => set("include", e.target.value) }),
+      ]),
+    ]));
+  } else {
+    wrap.append(el("div", { className: "daypart" }, [
+      el("div", { className: "row" }, [
+        Object.assign(el("input", { type: "text", value: src.url ?? "", style: "flex:1" }), {
+          placeholder: src.kind === "trakt"
+            ? "https://trakt.tv/users/someone/lists/best-of-1985"
+            : "https://mdblist.com/lists/someone/my-list",
+          onchange: (e) => set("url", e.target.value.trim()),
+        }),
+      ]),
+    ]));
+  }
+
+  wrap.append(
+    el("div", { className: "row", style: "margin-top:8px" }, [
+      el("button", { className: "act", textContent: "Preview matches", onclick: previewSource }),
+      el("span", { id: "src-preview", className: "muted" }),
+    ]),
+  );
+}
+
+async function previewSource() {
+  const out = $("#src-preview");
+  out.textContent = "checking...";
+  try {
+    const res = await api("/api/sources/preview", {
+      method: "POST",
+      body: JSON.stringify(state.draft.source),
+    });
+    out.textContent = `${res.count} titles`;
+
+    const list = el("div", { className: "results", style: "margin-top:8px" });
+    for (const t of res.titles.slice(0, 40)) {
+      list.append(el("div", { className: "result" }, [
+        el("div", {}, [
+          el("div", { textContent: t.name }),
+          el("div", { className: "muted", textContent:
+            [t.year, t.rating ? `${t.rating}` : null, t.id].filter(Boolean).join(" · ") }),
+        ]),
+      ]));
+    }
+    const old = $("#src-preview-list");
+    if (old) old.remove();
+    list.id = "src-preview-list";
+    $("#src-editor").append(list);
+  } catch (err) {
+    out.textContent = err.message;
+  }
+}
+
+$("#src-kind").addEventListener("change", (e) => {
+  const kind = e.target.value;
+  if (!kind) delete state.draft.source;
+  else if (kind === "rule") state.draft.source = { kind, type: "movie", genres: [], limit: 50 };
+  else if (kind === "tmdb") state.draft.source = {
+    kind, type:"movie", includeGenres:[], excludeGenres:[], languages:[], countries:[],
+    companies:[], networks:[], includeKeywords:[], excludeKeywords:[], sort:"popularity", limit:50,
+  };
+  else if (kind === "stremio") state.draft.source = { kind, include: "all", limit: 100 };
+  else state.draft.source = { kind, url: "", limit: 100 };
+  renderSourceEditor();
+});
+
+function renderDayparts() {
+  const wrap = $("#dayparts");
+  wrap.textContent = "";
+  $("#bar-wrap").textContent = "";
+  if (state.draft.dayparts.length) $("#bar-wrap").append(daypartBar(state.draft.dayparts));
+
+  state.draft.dayparts.forEach((d, i) => {
+    const box = el("div", { className: "daypart" });
+    box.append(
+      el("div", { className: "row" }, [
+        Object.assign(el("input", { type: "text", value: d.name, placeholder: "Block name", style: "flex:1" }),
+          { onchange: (e) => { d.name = e.target.value; } }),
+        Object.assign(el("input", { type: "text", value: d.start, placeholder: "HH:MM", style: "width:80px" }),
+          { onchange: (e) => { d.start = e.target.value; renderDayparts(); } }),
+        Object.assign(el("input", { type: "text", value: d.end, placeholder: "HH:MM", style: "width:80px" }),
+          { onchange: (e) => { d.end = e.target.value; renderDayparts(); } }),
+        Object.assign(el("select", {}, [
+          el("option", { value: "", textContent: "inherit" }),
+          el("option", { value: "shuffle", textContent: "shuffle" }),
+          el("option", { value: "sequential", textContent: "sequential" }),
+          el("option", { value: "weighted", textContent: "weighted" }),
+        ]), { value: d.strategy || "", onchange: (e) => {
+          if (e.target.value) d.strategy = e.target.value; else delete d.strategy;
+        } }),
+        el("button", { className: "act danger", textContent: "×",
+          onclick: () => { state.draft.dayparts.splice(i, 1); renderDayparts(); } }),
+      ]),
+    );
+
+    const chips = el("div", { className: "row", style: "margin-top:8px" });
+    chips.append(el("span", { className: "muted", textContent: d.content ? "Uses:" : "Uses channel content" }));
+    (d.content || []).forEach((c, ci) => {
+      chips.append(
+        el("span", { className: "pill", textContent: (c.name || c.id) + " ×",
+          style: "cursor:pointer",
+          onclick: () => { d.content.splice(ci, 1); if (!d.content.length) delete d.content; renderDayparts(); } }),
+      );
+    });
+
+    const picker = el("select", {}, [el("option", { value: "", textContent: "+ add title from channel" })]);
+    state.draft.content.forEach((c) => picker.append(el("option", { value: c.id, textContent: c.name || c.id })));
+    picker.onchange = (e) => {
+      const src = state.draft.content.find((c) => c.id === e.target.value);
+      if (src) {
+        d.content = d.content || [];
+        if (!d.content.some((c) => c.id === src.id)) d.content.push({ ...src });
+        renderDayparts();
+      }
+    };
+    chips.append(picker);
+    box.append(chips);
+    wrap.append(box);
+  });
+}
+
+function addDaypart() {
+  state.draft.dayparts.push({ name: "New block", start: "18:00", end: "22:00" });
+  renderDayparts();
+}
+
+function draftPayload() {
+  const d = state.draft;
+  d.id = $("#ch-id").value.trim();
+  d.name = $("#ch-name").value.trim();
+  d.description = $("#ch-desc").value.trim() || undefined;
+  d.strategy = $("#ch-strategy").value;
+  d.seed = Number($("#ch-seed").value) || 1;
+
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(d.id)) throw new Error("id must be lowercase letters, digits, dashes");
+  if (!d.name) throw new Error("name is required");
+  // A channel needs somewhere to get content from, but a source counts.
+  if (!d.content.length && !d.source && !d.pools?.length) throw new Error("add a title, pool, or automatic content source");
+
+  // `name` is a UI convenience for showing something readable; the server schema does
+  // not accept it, so it is stripped before saving.
+  const clean = (c) => ({
+    type: c.type,
+    id: c.id,
+    ...(c.season ? { season: c.season } : {}),
+    ...(c.episode ? { episode: c.episode } : {}),
+    ...(c.weight > 1 ? { weight: c.weight } : {}),
+  });
+  return {
+    ...d,
+    content: d.content.map(clean),
+    dayparts: d.dayparts.map((p) => ({ ...p, content: p.content ? p.content.map(clean) : undefined })),
+  };
+}
+
+async function previewDraft() {
+  const wrap = $("#draft-preview");
+  const button = $("#preview-draft-btn");
+  wrap.style.color = "";
+  wrap.textContent = "Building projection...";
+  button.disabled = true;
+
+  try {
+    const channel = draftPayload();
+    const data = await api("/api/channels/preview", {
+      method: "POST",
+      body: JSON.stringify({ channel, hours: 12 }),
+    });
+
+    wrap.textContent = "";
+    wrap.append(el("div", { className: "muted", textContent:
+      `${data.contentCount} titles in the pool` +
+      (data.sourceCount ? ` · ${data.sourceCount} automatic matches` : "") }));
+
+    if (data.warnings.length) {
+      wrap.append(el("div", { className: "muted", style: "color:var(--warn);margin:6px 0",
+        textContent: data.warnings.join(" ") }));
+    }
+    if (!data.programs.length) {
+      wrap.append(el("div", { className: "muted", textContent: "Nothing would be scheduled." }));
+      return;
+    }
+
+    const table = el("table", {}, [el("thead", {}, [el("tr", {}, [
+      el("th", { textContent: "Starts" }),
+      el("th", { textContent: "Program" }),
+      el("th", { textContent: "Block" }),
+      el("th", { textContent: "Runtime" }),
+    ])])]);
+    const body = el("tbody");
+    for (const p of data.programs) {
+      body.append(el("tr", {}, [
+        el("td", { className: "muted", textContent: fmtTime(p.start) }),
+        el("td", { textContent: p.title }),
+        el("td", { className: "muted", textContent: p.daypart || "default" }),
+        el("td", { className: "muted", textContent:
+          `${Math.round(p.duration / 60000)} min · ${p.durationSource}` }),
+      ]));
+    }
+    table.append(body);
+    wrap.append(table);
+  } catch (err) {
+    wrap.textContent = err.message;
+    wrap.style.color = "var(--danger)";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function saveChannel() {
+  let payload;
+  try {
+    payload = draftPayload();
+  } catch (err) {
+    return toast(err.message, true);
+  }
+
+  const others = state.channels.filter((c) => c.id !== state.editing);
+  try {
+    await api("/api/channels", {
+      method: "PUT",
+      body: JSON.stringify({ channels: [...others, payload] }),
+    });
+    editor.close();
+    toast("Saved. Rebuilding schedule...");
+    loadChannels();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function deleteChannel() {
+  if (!confirm(`Delete channel "${state.editing}"?`)) return;
+  const others = state.channels.filter((c) => c.id !== state.editing);
+  await api("/api/channels", { method: "PUT", body: JSON.stringify({ channels: others }) });
+  editor.close();
+  toast("Deleted");
+  loadChannels();
+}
+
+// ---------------------------------------------------------------- presets
+
+async function loadPresets() {
+  const presets = await api("/api/presets");
+  const wrap = $("#presets");
+  wrap.textContent = "";
+  for (const p of presets) {
+    const card = el("div", { className: "card" });
+    const actions = [];
+    if (p.installed) {
+      actions.push(
+        el("button", { className: "act", textContent: "Open existing",
+          onclick: () => openExistingChannel(p.existingChannelId) }),
+        el("button", { className: "act danger", textContent: "Replace with preset",
+          onclick: () => confirm(
+            `Replace channel "${p.existingChannelId}" with the ${p.label} preset? Its current lineup and schedule will be reset.`,
+          ) && applyPreset(p.key, "replace") }),
+      );
+    } else {
+      actions.push(
+        el("button", { className: "act", textContent: "Customize",
+          onclick: () => customizePreset(p) }),
+        el("button", { className: "act primary", textContent: "Add",
+          onclick: () => applyPreset(p.key, "add") }),
+      );
+    }
+    card.append(
+      el("div", { className: "row spread" }, [
+        el("div", {}, [
+          el("div", { className: "row" }, [
+            el("h3", { textContent: p.label }),
+            ...(p.installed ? [el("span", { className: "pill live", textContent: "ALREADY REPRESENTED" })] : []),
+          ]),
+          el("div", { className: "muted", textContent: p.summary }),
+          el("div", { className: "muted", style: "margin-top:6px", textContent:
+            `${p.titles} titles · ` +
+            (p.dayparts.length
+              ? p.dayparts.map((d) => `${d.name} ${d.start}-${d.end}`).join(" · ")
+              : "no dayparts") }),
+        ]),
+        el("div", { className: "row" }, actions),
+      ]),
+    );
+    wrap.append(card);
+  }
+}
+
+async function customizePreset(preset) {
+  await loadChannels();
+  await openCreator(null, preset.channel);
+}
+
+async function openExistingChannel(id) {
+  await loadChannels();
+  await openCreator(id);
+}
+
+async function applyPreset(key, mode) {
+  try {
+    const { action, channel } = await api("/api/presets/apply", {
+      method: "POST",
+      body: JSON.stringify({ key, mode }),
+    });
+    toast(`${action === "replaced" ? "Replaced" : "Added"} "${channel.name}". Building schedule...`);
+    await Promise.all([loadPresets(), loadChannels()]);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// ---------------------------------------------------------------- ops
+
+async function loadOps() {
+  const status = await api("/api/status");
+  const cd = $("#cooldown");
+  cd.hidden = !status.cooldownSeconds;
+  cd.textContent = `debrid cooldown ${status.cooldownSeconds}s`;
+
+  const wrap = $("#ops");
+  wrap.textContent = "";
+  const table = el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", { textContent: "Channel" }), el("th", { textContent: "State" }),
+      el("th", { textContent: "Scheduled through" }), el("th", { textContent: "" }),
+    ])]),
+  ]);
+  const body = el("tbody");
+  const picker = $("#preview-channel");
+  picker.textContent = "";
+
+  for (const c of status.channels) {
+    picker.append(el("option", { value: c.id, textContent: c.name }));
+    body.append(
+      el("tr", {}, [
+        el("td", { textContent: c.name }),
+        el("td", {}, [
+          el("span", { className: "pill" + (c.live || c.state === "ready" ? " live" : ""), textContent: c.live ? "LIVE" : c.state }),
+          el("div", { className:"progress", style:"margin-top:5px", title:`${Math.round(c.progress * 100)}% of horizon ready` }, [
+            el("span", { style:`width:${Math.round(c.progress * 100)}%` }),
+          ]),
+        ]),
+        el("td", { className: "muted", textContent: (c.scheduledThrough
+          ? new Date(c.scheduledThrough).toLocaleString() : "not scheduled") +
+          (c.detail ? ` · ${c.detail}` : "") }),
+        el("td", {}, [
+          el("div", { className: "row" }, [
+            el("button", { className: "act", textContent: "Skip", title: "Drop what is airing now",
+              onclick: () => op(c.id, "skip") }),
+            el("button", { className: "act danger", textContent: "Regenerate",
+              title: "Clear the timeline and rebuild it",
+              onclick: () => confirm(`Rebuild ${c.name}'s schedule?`) && op(c.id, "regenerate") }),
+          ]),
+        ]),
+      ]),
+    );
+  }
+  table.append(body);
+  wrap.append(el("div", { className: "card" }, [table]));
+  loadDiagnostics(wrap);
+}
+
+/**
+ * HLS delivery diagnostics, for working out why a TV will not play a channel.
+ * Deliberately shows the two things that are wrong most often: a stream URL pointing at
+ * the server's own loopback address, and an advertised codec string that does not match
+ * what the encoder is really emitting.
+ */
+async function loadDiagnostics(wrap) {
+  let data;
+  try {
+    data = await api("/debug/hls");
+  } catch {
+    return;
+  }
+
+  const rows = [];
+  for (const ch of data.channels) {
+    const problems = [];
+    if (ch.publicBaseUrlIsLoopback) {
+      problems.push("stream URL is loopback - unreachable from a TV or phone");
+    }
+    if (!ch.codecsAgree) {
+      problems.push(`advertised ${ch.advertised.combined} but the stream is ${ch.measured?.combined}`);
+    }
+    rows.push(
+      el("tr", {}, [
+        el("td", { textContent: ch.channelId }),
+        el("td", { className: "muted", textContent: ch.encoder ?? "?" }),
+        el("td", { className: "muted", textContent: `${ch.advertised.combined} (${ch.advertised.source})` }),
+        el("td", {}, [
+          el("span", {
+            className: "pill" + (problems.length ? "" : " live"),
+            textContent: problems.length ? "check" : "ok",
+          }),
+        ]),
+        el("td", { className: "muted", textContent: problems.join("; ") || "-" }),
+      ]),
+    );
+  }
+
+  const table = el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", { textContent: "Channel" }), el("th", { textContent: "Encoder" }),
+      el("th", { textContent: "Advertised codecs" }), el("th", { textContent: "" }),
+      el("th", { textContent: "Notes" }),
+    ])]),
+    el("tbody", {}, rows),
+  ]);
+
+  wrap.append(el("div", { className: "card" }, [
+    el("h3", { textContent: "HLS diagnostics" }),
+    el("p", { className: "muted", textContent:
+      `${data.recentRequests.length} recent feed request(s). Full detail, including what a ` +
+      `device actually asked for, is at /debug/hls` }),
+    table,
+  ]));
+}
+
+async function op(id, action) {
+  try {
+    await api(`/api/channels/${id}/${action}`, { method: "POST" });
+    toast(action === "skip" ? "Skipped" : "Rebuilding schedule...");
+    setTimeout(loadOps, 800);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// ---------------------------------------------------------------- preview
+
+let hls;
+function startPreview() {
+  const id = $("#preview-channel").value;
+  if (!id) return;
+  const video = $("#preview");
+  const src = `/ch/${id}/live.m3u8`;
+  stopPreview();
+  $("#preview-status").textContent = "starting (encoders run in real time, so this takes a few seconds)...";
+
+  if (window.Hls && Hls.isSupported()) {
+    hls = new Hls({ liveSyncDurationCount: 3 });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      $("#preview-status").textContent = "playing";
+      video.play().catch(() => {});
+    });
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      if (data.fatal) $("#preview-status").textContent = "error: " + data.details;
+    });
+  } else {
+    // Safari plays HLS natively and does not need hls.js.
+    video.src = src;
+    video.play().catch(() => {});
+    $("#preview-status").textContent = "playing";
+  }
+}
+
+function stopPreview() {
+  const video = $("#preview");
+  if (hls) { hls.destroy(); hls = null; }
+  video.removeAttribute("src");
+  video.load();
+  $("#preview-status").textContent = "";
+}
+
+loadGuide();
+setInterval(() => { if ($("#view-ops").classList.contains("on")) loadOps(); }, 15000);
+</script>
+</body>
+</html>

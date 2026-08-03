@@ -1,0 +1,54 @@
+{
+  "name": "stremio-channels",
+  "version": "0.1.0",
+  "description": "Clock-synced linear TV channels for Stremio, programmed from debrid sources",
+  "license": "MIT",
+  "private": true,
+  "homepage": "https://github.com/Lancej1011/stremio-channels#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lancej1011/stremio-channels.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lancej1011/stremio-channels/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dist/server.js",
+  "bin": {
+    "stremio-channels": "dist/server.js"
+  },
+  "files": [
+    "dist",
+    "presets",
+    "examples",
+    "channels.example.json",
+    "config.example.json",
+    "README.md",
+    "DOCKER.md"
+  ],
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "node -e \"require('fs').cpSync('src/ui','dist/ui',{recursive:true})\"",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:integration": "tsx --test \"src/**/*.itest.ts\"",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "fastify": "^5.2.1",
+    "hls.js": "^1.6.16",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

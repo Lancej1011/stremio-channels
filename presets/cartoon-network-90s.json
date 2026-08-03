@@ -1,0 +1,193 @@
+{
+  "key": "cartoon-network-90s",
+  "label": "90s / 00s Cartoon Network",
+  "summary": "A 24-title Cartoon Cartoons lineup with comedy, action and after-dark programming pools.",
+  "channel": {
+    "id": "cartoons",
+    "name": "Cartoon Cartoons",
+    "description": "A 90s and early-00s cartoon network, running around the clock.",
+    "strategy": "sequential",
+    "seed": 1990,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "powerhouse-comedy",
+        "name": "Powerhouse Comedy",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0115157"
+          },
+          {
+            "type": "series",
+            "id": "tt0175058"
+          },
+          {
+            "type": "series",
+            "id": "tt0220880"
+          },
+          {
+            "type": "series",
+            "id": "tt0184111"
+          },
+          {
+            "type": "series",
+            "id": "tt0118360"
+          },
+          {
+            "type": "series",
+            "id": "tt0118289"
+          },
+          {
+            "type": "series",
+            "id": "tt0292800"
+          },
+          {
+            "type": "series",
+            "id": "tt0218769"
+          },
+          {
+            "type": "series",
+            "id": "tt0235589"
+          },
+          {
+            "type": "series",
+            "id": "tt0260653"
+          },
+          {
+            "type": "series",
+            "id": "tt0291672"
+          },
+          {
+            "type": "series",
+            "id": "tt0312255"
+          },
+          {
+            "type": "series",
+            "id": "tt0312109"
+          },
+          {
+            "type": "series",
+            "id": "tt0419326"
+          },
+          {
+            "type": "series",
+            "id": "tt0419315"
+          },
+          {
+            "type": "series",
+            "id": "tt0419348"
+          },
+          {
+            "type": "series",
+            "id": "tt1140100"
+          },
+          {
+            "type": "series",
+            "id": "tt1178180"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "action-hour",
+        "name": "Action Hour",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0278238"
+          },
+          {
+            "type": "series",
+            "id": "tt0343314"
+          },
+          {
+            "type": "series",
+            "id": "tt0275137"
+          },
+          {
+            "type": "series",
+            "id": "tt0147746"
+          },
+          {
+            "type": "series",
+            "id": "tt0361201"
+          },
+          {
+            "type": "series",
+            "id": "tt0760437"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "after-dark",
+        "name": "After Dark",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0220880"
+          },
+          {
+            "type": "series",
+            "id": "tt0292800"
+          },
+          {
+            "type": "series",
+            "id": "tt1178180"
+          },
+          {
+            "type": "series",
+            "id": "tt0312255"
+          },
+          {
+            "type": "series",
+            "id": "tt1140100"
+          },
+          {
+            "type": "series",
+            "id": "tt0278238"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "powerhouse-comedy",
+      "action-hour"
+    ],
+    "dayparts": [
+      {
+        "name": "Morning Cartoons",
+        "start": "06:00",
+        "end": "12:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "powerhouse-comedy"
+        ]
+      },
+      {
+        "name": "Afternoon Action",
+        "start": "15:00",
+        "end": "19:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "action-hour"
+        ]
+      },
+      {
+        "name": "After Dark",
+        "start": "22:00",
+        "end": "02:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "after-dark"
+        ]
+      }
+    ]
+  }
+}

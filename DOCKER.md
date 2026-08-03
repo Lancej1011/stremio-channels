@@ -1,0 +1,110 @@
+# Running in Docker
+
+Hardware encoding inside a container is the most common self-hosting failure, so each
+case is spelled out. The CPU fallback needs no flags at all and always works.
+
+The published image is `ghcr.io/lancej1011/stremio-channels:latest`. v0.1 publishes
+`linux/amd64`; ARM images will follow after native dependency and encoder validation.
+
+## Docker Compose (recommended)
+
+```bash
+mkdir -p config data
+cp channels.example.json config/channels.json
+cp .env.example .env
+$EDITOR .env
+docker compose up -d
+```
+
+Set either `TORBOX_API_KEY` or `STREAM_ADDON_URL` when your editor opens. Configuration lives in
+`./config`, schedules and caches live in `./data`, and both survive image upgrades.
+The default port binding is loopback-only because the editor has no built-in auth.
+
+Upgrade without touching those volumes:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To build the checked-out source instead, run `docker compose build --pull` followed by
+`docker compose up -d`.
+
+## Private HTTPS for another device
+
+Stremio requires HTTPS for addon URLs that are not on `127.0.0.1`. Keep the container on
+loopback and use Tailscale Serve inside your private tailnet:
+
+```bash
+tailscale serve --bg 7654
+tailscale serve status
+```
+
+Set `PUBLIC_BASE_URL` in `.env` to the reported `https://...ts.net` origin, recreate the
+container, and install `<that-origin>/manifest.json` in Stremio. Do not publish port 7654
+or use Tailscale Funnel; v0.1's admin surface is intentionally LAN/VPN-only.
+
+## Manual runs and hardware acceleration
+
+The commands below are alternatives to Compose when device passthrough needs tuning.
+
+## CPU (works everywhere)
+
+```bash
+docker run -d --name channels \
+  -p 127.0.0.1:7654:7654 \
+  -v "$PWD/data:/data" -v "$PWD/config:/config" \
+  -e STREAM_ADDON_URL="https://torrentio.strem.fun/YOUR-CONFIG/manifest.json" \
+  -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  ghcr.io/lancej1011/stremio-channels:latest
+```
+
+`PUBLIC_BASE_URL` is the URL Stremio receives. Keep the localhost value for a same-host
+client; use the Tailscale HTTPS origin for any other device.
+
+## NVIDIA / NVENC
+
+Requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+on the host.
+
+```bash
+docker run -d --name channels \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video \
+  -p 127.0.0.1:7654:7654 \
+  -v "$PWD/data:/data" -v "$PWD/config:/config" \
+  -e STREAM_ADDON_URL="..." \
+  -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  ghcr.io/lancej1011/stremio-channels:latest
+```
+
+`NVIDIA_DRIVER_CAPABILITIES` must include `video`. Without it the driver loads but NVENC
+is missing, encoder detection quietly falls back to CPU, and you will wonder why the GPU
+is idle.
+
+## Intel QuickSync / VAAPI
+
+```bash
+docker run -d --name channels \
+  --device /dev/dri:/dev/dri \
+  -p 127.0.0.1:7654:7654 \
+  -v "$PWD/data:/data" -v "$PWD/config:/config" \
+  -e STREAM_ADDON_URL="..." \
+  -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  ghcr.io/lancej1011/stremio-channels:latest
+```
+
+If the container user cannot open `/dev/dri/renderD128`, add `--group-add` with the
+host's `render` group id (`getent group render | cut -d: -f3`).
+
+## Verifying which encoder was chosen
+
+```bash
+docker logs channels | grep -i encoder
+```
+
+Expect `using hardware encoder h264_nvenc` (or `_qsv` / `_vaapi`). Seeing
+`using software encoder libx264` means the device was not visible to the container —
+detection runs a real test encode, so it never claims hardware it cannot use.
+
+Force a specific one with `-e ENCODER=nvenc` if detection picks wrong.

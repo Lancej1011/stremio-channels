@@ -1,0 +1,327 @@
+{
+  "channels": [
+    {
+      "id": "movies-action",
+      "name": "Action Movies",
+      "description": "English-original action movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 28,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 28, "name": "Action" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 28, "name": "Action" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-adventure",
+      "name": "Adventure Movies",
+      "description": "English-original adventure movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 12,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 12, "name": "Adventure" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 12, "name": "Adventure" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-animation",
+      "name": "Animation Movies",
+      "description": "English-original animation movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 16,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 16, "name": "Animation" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 16, "name": "Animation" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-comedy",
+      "name": "Comedy Movies",
+      "description": "English-original comedy movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 35,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 35, "name": "Comedy" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 35, "name": "Comedy" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-crime",
+      "name": "Crime Movies",
+      "description": "English-original crime movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 80,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 80, "name": "Crime" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 80, "name": "Crime" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-documentary",
+      "name": "Documentary Movies",
+      "description": "English-original documentary movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 99,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 99, "name": "Documentary" }], "years": [1930, 1999], "minRating": 6, "minVotes": 100, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 99, "name": "Documentary" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-drama",
+      "name": "Drama Movies",
+      "description": "English-original drama movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 18,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 18, "name": "Drama" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 18, "name": "Drama" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-family",
+      "name": "Family Movies",
+      "description": "English-original family movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 10751,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10751, "name": "Family" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10751, "name": "Family" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-fantasy",
+      "name": "Fantasy Movies",
+      "description": "English-original fantasy movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 14,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 14, "name": "Fantasy" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 14, "name": "Fantasy" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-history",
+      "name": "History Movies",
+      "description": "English-original history movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 36,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 36, "name": "History" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 36, "name": "History" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-horror",
+      "name": "Horror Movies",
+      "description": "English-original horror movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 27,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 27, "name": "Horror" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 27, "name": "Horror" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-music",
+      "name": "Music Movies",
+      "description": "English-original music movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 10402,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10402, "name": "Music" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10402, "name": "Music" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-mystery",
+      "name": "Mystery Movies",
+      "description": "English-original mystery movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 9648,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 9648, "name": "Mystery" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 9648, "name": "Mystery" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-romance",
+      "name": "Romance Movies",
+      "description": "English-original romance movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 10749,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10749, "name": "Romance" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10749, "name": "Romance" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-scifi",
+      "name": "Sci-Fi Movies",
+      "description": "English-original science fiction movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 878,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 878, "name": "Science Fiction" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 878, "name": "Science Fiction" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-tv-movie",
+      "name": "Made-for-TV Movies",
+      "description": "English-original made-for-TV movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 10770,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10770, "name": "TV Movie" }], "years": [1930, 1999], "minRating": 6, "minVotes": 100, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10770, "name": "TV Movie" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-thriller",
+      "name": "Thriller Movies",
+      "description": "English-original thriller movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 53,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 53, "name": "Thriller" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 53, "name": "Thriller" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-war",
+      "name": "War Movies",
+      "description": "English-original war movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 10752,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10752, "name": "War" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 10752, "name": "War" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    },
+    {
+      "id": "movies-western",
+      "name": "Western Movies",
+      "description": "English-original western movies from the classic and modern eras.",
+      "strategy": "shuffle",
+      "seed": 37,
+      "pools": [
+        { "id": "classics", "name": "Classics", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 37, "name": "Western" }], "years": [1930, 1999], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } },
+        { "id": "modern", "name": "Modern", "source": { "kind": "tmdb", "type": "movie", "includeGenres": [{ "id": 37, "name": "Western" }], "years": [2000, 2026], "minRating": 6, "minVotes": 500, "languages": ["en"], "sort": "popularity", "limit": 30 } }
+      ],
+      "defaultPoolIds": ["classics", "modern"],
+      "dayparts": [
+        { "name": "Classics Matinee", "start": "06:00", "end": "18:00", "strategy": "shuffle", "poolIds": ["classics"] },
+        { "name": "Modern Prime Time", "start": "18:00", "end": "00:00", "strategy": "shuffle", "poolIds": ["modern"] },
+        { "name": "Midnight Movie Mix", "start": "00:00", "end": "06:00", "strategy": "shuffle", "poolIds": ["classics", "modern"] }
+      ]
+    }
+  ]
+}

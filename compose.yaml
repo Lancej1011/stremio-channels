@@ -1,0 +1,18 @@
+services:
+  channels:
+    image: ghcr.io/lancej1011/stremio-channels:latest
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 7654
+      DATA_DIR: /data
+      CHANNELS_FILE: /config/channels.json
+    ports:
+      - "127.0.0.1:7654:7654"
+    volumes:
+      - ./config:/config
+      - ./data:/data

@@ -1,0 +1,46 @@
+{
+  "key": "adult-swim",
+  "label": "Adult Swim late night",
+  "summary": "Adult animation, weighted to the small hours. Runs all day but the late block is the point.",
+  "channel": {
+    "id": "adultswim",
+    "name": "After Dark Animation",
+    "description": "Adult animation, all night.",
+    "strategy": "sequential",
+    "seed": 2001,
+    "content": [
+      { "type": "series", "id": "tt0149460", "weight": 2 },
+      { "type": "series", "id": "tt0182576" },
+      { "type": "series", "id": "tt0297494" },
+      { "type": "series", "id": "tt0437745" },
+      { "type": "series", "id": "tt2861424", "weight": 2 },
+      { "type": "series", "id": "tt0417373" },
+      { "type": "series", "id": "tt0839188" }
+    ],
+    "dayparts": [
+      {
+        "name": "The Late Block",
+        "start": "23:00",
+        "end": "04:00",
+        "strategy": "weighted",
+        "content": [
+          { "type": "series", "id": "tt2861424", "weight": 3 },
+          { "type": "series", "id": "tt0297494", "weight": 2 },
+          { "type": "series", "id": "tt0417373", "weight": 2 },
+          { "type": "series", "id": "tt0839188" },
+          { "type": "series", "id": "tt0437745" }
+        ]
+      },
+      {
+        "name": "Daytime Reruns",
+        "start": "10:00",
+        "end": "18:00",
+        "strategy": "sequential",
+        "content": [
+          { "type": "series", "id": "tt0149460" },
+          { "type": "series", "id": "tt0182576" }
+        ]
+      }
+    ]
+  }
+}

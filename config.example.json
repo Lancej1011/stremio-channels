@@ -1,0 +1,42 @@
+{
+  "host": "127.0.0.1",
+  "port": 7654,
+  "streamAddonUrl": "",
+  "_comment_publicBaseUrl": "Set this only if you watch from another device. It must be an address that device can reach, not localhost.",
+  "qualityPreference": [
+    "1080p",
+    "720p",
+    "2160p",
+    "480p"
+  ],
+  "video": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "bitrate": "6000k",
+    "gopSeconds": 2
+  },
+  "audio": {
+    "bitrate": "128k",
+    "sampleRate": 48000,
+    "channels": 2
+  },
+  "hls": {
+    "segmentSeconds": 2,
+    "listSize": 12
+  },
+  "idleShutdownSeconds": 120,
+  "scheduleHorizonHours": 24,
+  "_comment_encoder": "auto | nvenc | qsv | vaapi | cpu. Leave on auto unless detection picks wrong.",
+  "encoder": "auto",
+  "_comment_resolver": "Two options. Direct TorBox: set torboxApiKey (indexerUrl supplies torrent hashes, default Torrentio needs no config). Or any debrid: set streamAddonUrl to a stream addon install URL that already has your debrid key. TorBox wins if both are set.",
+  "torboxApiKey": "",
+  "indexerUrl": "https://torrentio.strem.fun",
+  "maxSizeGb": 25,
+  "_comment_smart": "Optional keys for smart channels. Basic Cinemeta rules need none. TMDB accepts an API Read Access Token (preferred) or v3 API Key; imports use their respective credentials.",
+  "tmdbReadAccessToken": "",
+  "tmdbApiKey": "",
+  "mdblistApiKey": "",
+  "traktClientId": "",
+  "stremioAuthKey": ""
+}

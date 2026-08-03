@@ -1,0 +1,206 @@
+{
+  "key": "disney-afternoon",
+  "label": "Disney Animation",
+  "summary": "Thirty animated Disney series across the classic afternoon, One Saturday Morning and modern eras.",
+  "channel": {
+    "id": "disney",
+    "name": "Disney Afternoon",
+    "description": "Disney animation from the classic afternoon block through modern adventures.",
+    "strategy": "sequential",
+    "seed": 1991,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "classic-afternoon",
+        "name": "Classic Disney Afternoon",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0092345"
+          },
+          {
+            "type": "series",
+            "id": "tt0101076"
+          },
+          {
+            "type": "series",
+            "id": "tt0096557"
+          },
+          {
+            "type": "series",
+            "id": "tt0108783"
+          },
+          {
+            "type": "series",
+            "id": "tt0088528"
+          },
+          {
+            "type": "series",
+            "id": "tt0098924"
+          },
+          {
+            "type": "series",
+            "id": "tt0103428"
+          },
+          {
+            "type": "series",
+            "id": "tt0213334"
+          },
+          {
+            "type": "series",
+            "id": "tt0165052"
+          },
+          {
+            "type": "series",
+            "id": "tt0105935"
+          },
+          {
+            "type": "series",
+            "id": "tt0112197"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "one-saturday-morning",
+        "name": "One Saturday Morning",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0126170"
+          },
+          {
+            "type": "series",
+            "id": "tt0128890"
+          },
+          {
+            "type": "series",
+            "id": "tt0237987"
+          },
+          {
+            "type": "series",
+            "id": "tt0144700"
+          },
+          {
+            "type": "series",
+            "id": "tt0138967"
+          },
+          {
+            "type": "series",
+            "id": "tt0272388"
+          },
+          {
+            "type": "series",
+            "id": "tt0257325"
+          },
+          {
+            "type": "series",
+            "id": "tt0275848"
+          },
+          {
+            "type": "series",
+            "id": "tt0337761"
+          },
+          {
+            "type": "series",
+            "id": "tt0293737"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "modern-adventures",
+        "name": "Modern Adventures",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0278866"
+          },
+          {
+            "type": "series",
+            "id": "tt0852863"
+          },
+          {
+            "type": "series",
+            "id": "tt1865718"
+          },
+          {
+            "type": "series",
+            "id": "tt0364774"
+          },
+          {
+            "type": "series",
+            "id": "tt0429305"
+          },
+          {
+            "type": "series",
+            "id": "tt2758770"
+          },
+          {
+            "type": "series",
+            "id": "tt8050740"
+          },
+          {
+            "type": "series",
+            "id": "tt8050756"
+          },
+          {
+            "type": "series",
+            "id": "tt5531466"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "classic-afternoon",
+      "one-saturday-morning",
+      "modern-adventures"
+    ],
+    "dayparts": [
+      {
+        "name": "One Saturday Morning",
+        "start": "06:00",
+        "end": "12:00",
+        "days": [
+          "sat"
+        ],
+        "strategy": "sequential",
+        "poolIds": [
+          "one-saturday-morning"
+        ]
+      },
+      {
+        "name": "Morning Toons",
+        "start": "06:00",
+        "end": "12:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "modern-adventures"
+        ]
+      },
+      {
+        "name": "The Disney Afternoon",
+        "start": "15:00",
+        "end": "19:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "classic-afternoon"
+        ]
+      },
+      {
+        "name": "Evening Adventures",
+        "start": "19:00",
+        "end": "23:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "modern-adventures"
+        ]
+      }
+    ]
+  }
+}

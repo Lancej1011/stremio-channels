@@ -1,0 +1,183 @@
+{
+  "key": "nicktoons-90s",
+  "label": "90s / 00s Nicktoons",
+  "summary": "A 90s-first Nickelodeon cartoon lineup with the essential 2000s favorites.",
+  "channel": {
+    "id": "nicktoons",
+    "name": "Nicktoons",
+    "description": "The best of 90s Nickelodeon animation with essential 2000s hits.",
+    "strategy": "sequential",
+    "seed": 1991,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "nineties-classics",
+        "name": "90s Classics",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0101188"
+          },
+          {
+            "type": "series",
+            "id": "tt0101084"
+          },
+          {
+            "type": "series",
+            "id": "tt0101178"
+          },
+          {
+            "type": "series",
+            "id": "tt0106115"
+          },
+          {
+            "type": "series",
+            "id": "tt0108684"
+          },
+          {
+            "type": "series",
+            "id": "tt0115200"
+          },
+          {
+            "type": "series",
+            "id": "tt0131664"
+          },
+          {
+            "type": "series",
+            "id": "tt0154061"
+          },
+          {
+            "type": "series",
+            "id": "tt0167743"
+          },
+          {
+            "type": "series",
+            "id": "tt0244926"
+          },
+          {
+            "type": "series",
+            "id": "tt0206512"
+          },
+          {
+            "type": "series",
+            "id": "tt0122353"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "two-thousands-hits",
+        "name": "2000s Hits",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0235911"
+          },
+          {
+            "type": "series",
+            "id": "tt0235918"
+          },
+          {
+            "type": "series",
+            "id": "tt0235923"
+          },
+          {
+            "type": "series",
+            "id": "tt0320808"
+          },
+          {
+            "type": "series",
+            "id": "tt0318233"
+          },
+          {
+            "type": "series",
+            "id": "tt0366005"
+          },
+          {
+            "type": "series",
+            "id": "tt0417299"
+          },
+          {
+            "type": "series",
+            "id": "tt0235916"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "weird-nick",
+        "name": "Weird Nick",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0101178"
+          },
+          {
+            "type": "series",
+            "id": "tt0106115"
+          },
+          {
+            "type": "series",
+            "id": "tt0108684"
+          },
+          {
+            "type": "series",
+            "id": "tt0122353"
+          },
+          {
+            "type": "series",
+            "id": "tt0235923"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "nineties-classics",
+      "two-thousands-hits"
+    ],
+    "dayparts": [
+      {
+        "name": "Morning Nicktoons",
+        "start": "06:00",
+        "end": "12:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "nineties-classics"
+        ]
+      },
+      {
+        "name": "After School",
+        "start": "15:00",
+        "end": "19:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "nineties-classics",
+          "two-thousands-hits"
+        ]
+      },
+      {
+        "name": "2000s Prime Time",
+        "start": "19:00",
+        "end": "22:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "two-thousands-hits"
+        ]
+      },
+      {
+        "name": "Weird Nick",
+        "start": "22:00",
+        "end": "02:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "weird-nick"
+        ]
+      }
+    ]
+  }
+}

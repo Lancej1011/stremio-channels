@@ -1,0 +1,195 @@
+{
+  "key": "comedy-central",
+  "label": "Comedy Channel",
+  "summary": "A broad 30-show comedy channel spanning sitcoms, sketch, satire, alternative and animation.",
+  "channel": {
+    "id": "comedy",
+    "name": "Comedy Channel",
+    "description": "Cult sitcoms, sketch, satire and animated comedy around the clock.",
+    "strategy": "sequential",
+    "seed": 2003,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "daytime-sitcoms",
+        "name": "Daytime Sitcoms",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0370194"
+          },
+          {
+            "type": "series",
+            "id": "tt1610527"
+          },
+          {
+            "type": "series",
+            "id": "tt5648202"
+          },
+          {
+            "type": "series",
+            "id": "tt0367279"
+          },
+          {
+            "type": "series",
+            "id": "tt1439629"
+          },
+          {
+            "type": "series",
+            "id": "tt1759761"
+          },
+          {
+            "type": "series",
+            "id": "tt2575988"
+          },
+          {
+            "type": "series",
+            "id": "tt1073507"
+          },
+          {
+            "type": "series",
+            "id": "tt1480684"
+          },
+          {
+            "type": "series",
+            "id": "tt2578560"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "sketch-and-alt",
+        "name": "Sketch and Alternative",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0353049"
+          },
+          {
+            "type": "series",
+            "id": "tt1981558"
+          },
+          {
+            "type": "series",
+            "id": "tt2712612"
+          },
+          {
+            "type": "series",
+            "id": "tt0194624"
+          },
+          {
+            "type": "series",
+            "id": "tt1981538"
+          },
+          {
+            "type": "series",
+            "id": "tt2578508"
+          },
+          {
+            "type": "series",
+            "id": "tt0318959"
+          },
+          {
+            "type": "series",
+            "id": "tt1118038"
+          },
+          {
+            "type": "series",
+            "id": "tt2244495"
+          },
+          {
+            "type": "series",
+            "id": "tt2176287"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "late-night",
+        "name": "Late Night",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0121955",
+            "weight": 3
+          },
+          {
+            "type": "series",
+            "id": "tt1621748"
+          },
+          {
+            "type": "series",
+            "id": "tt0386180"
+          },
+          {
+            "type": "series",
+            "id": "tt2297757"
+          },
+          {
+            "type": "series",
+            "id": "tt2141913"
+          },
+          {
+            "type": "series",
+            "id": "tt1430587"
+          },
+          {
+            "type": "series",
+            "id": "tt0264235"
+          },
+          {
+            "type": "series",
+            "id": "tt0866442"
+          },
+          {
+            "type": "series",
+            "id": "tt3766376"
+          },
+          {
+            "type": "series",
+            "id": "tt7908628"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "daytime-sitcoms",
+      "sketch-and-alt",
+      "late-night"
+    ],
+    "dayparts": [
+      {
+        "name": "Daytime",
+        "start": "10:00",
+        "end": "18:00",
+        "strategy": "weighted",
+        "poolIds": [
+          "daytime-sitcoms"
+        ]
+      },
+      {
+        "name": "Sketch and Alternative",
+        "start": "18:00",
+        "end": "22:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "sketch-and-alt"
+        ]
+      },
+      {
+        "name": "Late Night",
+        "start": "22:00",
+        "end": "03:00",
+        "strategy": "weighted",
+        "poolIds": [
+          "late-night"
+        ]
+      }
+    ]
+  }
+}

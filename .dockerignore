@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+dist
+data
+coverage
+.env
+*.log
+*.tgz
+config.json
+channels.json
+channels.json.bak
+channels.json.tmp
+config.json.bak
+config.json.tmp

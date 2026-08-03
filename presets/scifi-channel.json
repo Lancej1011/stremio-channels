@@ -1,0 +1,53 @@
+{
+  "key": "scifi-channel",
+  "label": "Sci-Fi channel",
+  "summary": "Genre television all day with a serialised prime-time block.",
+  "channel": {
+    "id": "scifi",
+    "name": "Sci-Fi Channel",
+    "description": "Space opera, conspiracies and anthology horror, around the clock.",
+    "strategy": "sequential",
+    "seed": 1997,
+    "content": [
+      { "type": "series", "id": "tt0092455" },
+      { "type": "series", "id": "tt0118480" },
+      { "type": "series", "id": "tt0106179" },
+      { "type": "series", "id": "tt0052520" },
+      { "type": "series", "id": "tt0407362" },
+      { "type": "series", "id": "tt0187636" },
+      { "type": "series", "id": "tt0105946" }
+    ],
+    "dayparts": [
+      {
+        "name": "Morning Anthology",
+        "start": "05:00",
+        "end": "10:00",
+        "strategy": "shuffle",
+        "content": [
+          { "type": "series", "id": "tt0052520" }
+        ]
+      },
+      {
+        "name": "Prime Time",
+        "start": "20:00",
+        "end": "23:00",
+        "strategy": "sequential",
+        "content": [
+          { "type": "series", "id": "tt0407362" },
+          { "type": "series", "id": "tt0092455" },
+          { "type": "series", "id": "tt0118480" }
+        ]
+      },
+      {
+        "name": "Overnight X-Files",
+        "start": "23:00",
+        "end": "03:00",
+        "strategy": "sequential",
+        "content": [
+          { "type": "series", "id": "tt0106179" },
+          { "type": "series", "id": "tt0187636" }
+        ]
+      }
+    ]
+  }
+}

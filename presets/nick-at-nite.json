@@ -1,0 +1,186 @@
+{
+  "key": "nick-at-nite",
+  "label": "Nick at Nite",
+  "summary": "Twenty-five classic sitcoms across the original, 70s/80s and modern-nostalgia eras.",
+  "channel": {
+    "id": "nick-at-nite",
+    "name": "Nick at Nite",
+    "description": "Classic comfort-TV sitcoms from black-and-white favorites through 2000s nostalgia.",
+    "strategy": "sequential",
+    "seed": 1985,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "early-classics",
+        "name": "Early Classics",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0043208"
+          },
+          {
+            "type": "series",
+            "id": "tt0054533"
+          },
+          {
+            "type": "series",
+            "id": "tt0057733"
+          },
+          {
+            "type": "series",
+            "id": "tt0058815"
+          },
+          {
+            "type": "series",
+            "id": "tt0053479"
+          },
+          {
+            "type": "series",
+            "id": "tt0065314"
+          },
+          {
+            "type": "series",
+            "id": "tt0068049"
+          },
+          {
+            "type": "series",
+            "id": "tt0063878"
+          },
+          {
+            "type": "series",
+            "id": "tt0057773"
+          },
+          {
+            "type": "series",
+            "id": "tt0058805"
+          },
+          {
+            "type": "series",
+            "id": "tt0057751"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "seventies-eighties",
+        "name": "70s and 80s",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0070992"
+          },
+          {
+            "type": "series",
+            "id": "tt0074016"
+          },
+          {
+            "type": "series",
+            "id": "tt0077053"
+          },
+          {
+            "type": "series",
+            "id": "tt0075596"
+          },
+          {
+            "type": "series",
+            "id": "tt0077089"
+          },
+          {
+            "type": "series",
+            "id": "tt0083399"
+          },
+          {
+            "type": "series",
+            "id": "tt0072519"
+          },
+          {
+            "type": "series",
+            "id": "tt0083413"
+          },
+          {
+            "type": "series",
+            "id": "tt0094540"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "modern-nostalgia",
+        "name": "Modern Nostalgia",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0092359"
+          },
+          {
+            "type": "series",
+            "id": "tt0098800"
+          },
+          {
+            "type": "series",
+            "id": "tt0101120"
+          },
+          {
+            "type": "series",
+            "id": "tt0310460"
+          },
+          {
+            "type": "series",
+            "id": "tt0460637"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "early-classics",
+      "seventies-eighties",
+      "modern-nostalgia"
+    ],
+    "dayparts": [
+      {
+        "name": "Modern Reruns",
+        "start": "06:00",
+        "end": "12:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "modern-nostalgia"
+        ]
+      },
+      {
+        "name": "Family Prime Time",
+        "start": "18:00",
+        "end": "23:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "seventies-eighties",
+          "modern-nostalgia"
+        ]
+      },
+      {
+        "name": "Nick at Nite",
+        "start": "23:00",
+        "end": "02:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "early-classics",
+          "seventies-eighties",
+          "modern-nostalgia"
+        ]
+      },
+      {
+        "name": "Black and White Overnight",
+        "start": "02:00",
+        "end": "06:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "early-classics"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "key": "fox5-morning",
+  "label": "Fox 5 Morning Throwback",
+  "summary": "Fox Kids, syndicated cartoons, action shows and school-morning favorites in familiar blocks.",
+  "channel": {
+    "id": "fox5-morning",
+    "name": "Fox 5 Morning Throwback",
+    "description": "A local-TV-style mix of Fox Kids cartoons, syndicated action, and school-morning favorites.",
+    "strategy": "sequential",
+    "seed": 1992,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "school-morning",
+        "name": "School Morning",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0096694"
+          },
+          {
+            "type": "series",
+            "id": "tt0103380"
+          },
+          {
+            "type": "series",
+            "id": "tt0111994"
+          },
+          {
+            "type": "series",
+            "id": "tt0147757"
+          },
+          {
+            "type": "series",
+            "id": "tt0105958"
+          },
+          {
+            "type": "series",
+            "id": "tt0126170"
+          },
+          {
+            "type": "series",
+            "id": "tt0128890"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "cartoon-comedy",
+        "name": "Cartoon Comedy",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0103373"
+          },
+          {
+            "type": "series",
+            "id": "tt0103408"
+          },
+          {
+            "type": "series",
+            "id": "tt0112047"
+          },
+          {
+            "type": "series",
+            "id": "tt0098929"
+          },
+          {
+            "type": "series",
+            "id": "tt0105941"
+          },
+          {
+            "type": "series",
+            "id": "tt0103562"
+          },
+          {
+            "type": "series",
+            "id": "tt0111970"
+          },
+          {
+            "type": "series",
+            "id": "tt0112123"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "action-hour",
+        "name": "Action Hour",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt0103359"
+          },
+          {
+            "type": "series",
+            "id": "tt0103584"
+          },
+          {
+            "type": "series",
+            "id": "tt0112175"
+          },
+          {
+            "type": "series",
+            "id": "tt0112196"
+          },
+          {
+            "type": "series",
+            "id": "tt0106064"
+          },
+          {
+            "type": "series",
+            "id": "tt0210418"
+          },
+          {
+            "type": "series",
+            "id": "tt0168366"
+          },
+          {
+            "type": "series",
+            "id": "tt0111987"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "school-morning",
+      "cartoon-comedy",
+      "action-hour"
+    ],
+    "dayparts": [
+      {
+        "name": "Saturday Morning",
+        "start": "06:00",
+        "end": "12:00",
+        "days": [
+          "sat"
+        ],
+        "strategy": "sequential",
+        "poolIds": [
+          "cartoon-comedy",
+          "action-hour"
+        ]
+      },
+      {
+        "name": "Weekday School Morning",
+        "start": "06:00",
+        "end": "10:00",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ],
+        "strategy": "sequential",
+        "poolIds": [
+          "school-morning"
+        ]
+      },
+      {
+        "name": "Weekday After School",
+        "start": "15:00",
+        "end": "19:00",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ],
+        "strategy": "sequential",
+        "poolIds": [
+          "action-hour"
+        ]
+      }
+    ]
+  }
+}
