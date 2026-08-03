@@ -1,0 +1,155 @@
+{
+  "key": "boomerang-classics",
+  "label": "Boomerang Classics",
+  "summary": "Forty-one cartoon favorites spanning Scooby mysteries, Hanna-Barbera comedy, theatrical shorts and retro favorites.",
+  "channel": {
+    "id": "boomerang-classics",
+    "name": "Boomerang Classics",
+    "description": "A round-the-clock home for classic Scooby-Doo, Hanna-Barbera favorites and retro Saturday-morning cartoons.",
+    "strategy": "sequential",
+    "seed": 1992,
+    "content": [],
+    "refreshHours": 168,
+    "pools": [
+      {
+        "id": "scooby-mysteries",
+        "name": "Scooby Mysteries",
+        "content": [
+          { "type": "series", "id": "tt0063950" },
+          { "type": "series", "id": "tt0068112" },
+          { "type": "series", "id": "tt0074053" },
+          { "type": "series", "id": "tt0084970" },
+          { "type": "series", "id": "tt0088628" },
+          { "type": "series", "id": "tt0094531" }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "hanna-barbera-favorites",
+        "name": "Hanna-Barbera Favorites",
+        "content": [
+          { "type": "series", "id": "tt0122365" },
+          { "type": "series", "id": "tt0173587" },
+          { "type": "series", "id": "tt0063889" },
+          { "type": "series", "id": "tt0177447" },
+          { "type": "series", "id": "tt0070996" },
+          { "type": "series", "id": "tt0284712" },
+          { "type": "series", "id": "tt0069636" },
+          { "type": "series", "id": "tt0177438" },
+          { "type": "series", "id": "tt0181923" },
+          { "type": "series", "id": "tt0069595" },
+          { "type": "series", "id": "tt0066667" },
+          { "type": "series", "id": "tt0065307" }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "family-classics",
+        "name": "Family Classics",
+        "content": [
+          { "type": "series", "id": "tt0054572" },
+          { "type": "series", "id": "tt0053502" },
+          { "type": "series", "id": "tt0055683" },
+          { "type": "series", "id": "tt0255768" },
+          { "type": "series", "id": "tt0051283" },
+          { "type": "series", "id": "tt0244156" },
+          { "type": "series", "id": "tt0060004" },
+          { "type": "series", "id": "tt0058847" },
+          { "type": "series", "id": "tt0069554" },
+          { "type": "series", "id": "tt12158994" },
+          { "type": "series", "id": "tt0088491" },
+          { "type": "series", "id": "tt0145628" },
+          { "type": "series", "id": "tt0063939" }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "action-adventure",
+        "name": "Action and Adventure",
+        "content": [
+          { "type": "series", "id": "tt0057730" },
+          { "type": "series", "id": "tt0060026" },
+          { "type": "series", "id": "tt0061237" },
+          { "type": "series", "id": "tt0068129" },
+          { "type": "series", "id": "tt0069641" },
+          { "type": "series", "id": "tt0061250" }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
+        "id": "retro-after-school",
+        "name": "Retro After School",
+        "content": [
+          { "type": "series", "id": "tt0081933" },
+          { "type": "series", "id": "tt0086802" },
+          { "type": "series", "id": "tt0083461" },
+          { "type": "series", "id": "tt0094469" }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      }
+    ],
+    "defaultPoolIds": [
+      "scooby-mysteries",
+      "hanna-barbera-favorites",
+      "family-classics",
+      "action-adventure",
+      "retro-after-school"
+    ],
+    "dayparts": [
+      {
+        "name": "Breakfast Cartoons",
+        "start": "06:00",
+        "end": "11:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "family-classics",
+          "retro-after-school"
+        ]
+      },
+      {
+        "name": "Scooby Mystery Marathon",
+        "start": "11:00",
+        "end": "14:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "scooby-mysteries"
+        ]
+      },
+      {
+        "name": "Hanna-Barbera Afternoon",
+        "start": "14:00",
+        "end": "19:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "hanna-barbera-favorites",
+          "family-classics"
+        ]
+      },
+      {
+        "name": "Boomerang Prime Time",
+        "start": "19:00",
+        "end": "22:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "scooby-mysteries",
+          "hanna-barbera-favorites",
+          "family-classics"
+        ]
+      },
+      {
+        "name": "Action All-Stars",
+        "start": "22:00",
+        "end": "02:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "action-adventure"
+        ]
+      }
+    ]
+  }
+}

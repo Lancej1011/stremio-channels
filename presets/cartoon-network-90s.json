@@ -1,11 +1,11 @@
 {
   "key": "cartoon-network-90s",
-  "label": "90s / 00s Cartoon Network",
-  "summary": "A 24-title Cartoon Cartoons lineup with comedy, action and after-dark programming pools.",
+  "label": "Cartoon Network Classics & Hits",
+  "summary": "A 35-title lineup spanning the original Cartoon Cartoons, action favorites and the biggest later-era hits.",
   "channel": {
     "id": "cartoons",
     "name": "Cartoon Cartoons",
-    "description": "A 90s and early-00s cartoon network, running around the clock.",
+    "description": "Cartoon Network favorites from the original Cartoon Cartoons through the biggest modern classics.",
     "strategy": "sequential",
     "seed": 1990,
     "content": [],
@@ -124,6 +124,58 @@
         "refreshHours": 168
       },
       {
+        "id": "modern-hits",
+        "name": "Modern Hits",
+        "content": [
+          {
+            "type": "series",
+            "id": "tt1305826"
+          },
+          {
+            "type": "series",
+            "id": "tt1710308"
+          },
+          {
+            "type": "series",
+            "id": "tt1942683"
+          },
+          {
+            "type": "series",
+            "id": "tt3061046"
+          },
+          {
+            "type": "series",
+            "id": "tt4839610"
+          },
+          {
+            "type": "series",
+            "id": "tt3061050"
+          },
+          {
+            "type": "series",
+            "id": "tt7713450"
+          },
+          {
+            "type": "series",
+            "id": "tt6965802"
+          },
+          {
+            "type": "series",
+            "id": "tt8146754"
+          },
+          {
+            "type": "series",
+            "id": "tt3718778"
+          },
+          {
+            "type": "series",
+            "id": "tt2771780"
+          }
+        ],
+        "excluded": [],
+        "refreshHours": 168
+      },
+      {
         "id": "after-dark",
         "name": "After Dark",
         "content": [
@@ -158,7 +210,8 @@
     ],
     "defaultPoolIds": [
       "powerhouse-comedy",
-      "action-hour"
+      "action-hour",
+      "modern-hits"
     ],
     "dayparts": [
       {
@@ -177,6 +230,15 @@
         "strategy": "sequential",
         "poolIds": [
           "action-hour"
+        ]
+      },
+      {
+        "name": "Modern Prime Time",
+        "start": "19:00",
+        "end": "22:00",
+        "strategy": "sequential",
+        "poolIds": [
+          "modern-hits"
         ]
       },
       {

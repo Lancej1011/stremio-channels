@@ -13,7 +13,12 @@ import { masterPlaylist } from "./feed/playlist.ts";
 import { resolveCodecs } from "./debug.ts";
 import { baseUrl, loadChannels, loadConfig, type ChannelDef } from "./config.ts";
 import { openDb } from "./db.ts";
-import { buildManifest, channelIdFromStremioId, stremioId } from "./addon/manifest.ts";
+import {
+  buildManifest,
+  catalogItemName,
+  channelIdFromStremioId,
+  stremioId,
+} from "./addon/manifest.ts";
 import { cooldownRemainingSeconds } from "./content/providers/torbox.ts";
 import { logger } from "./log.ts";
 
@@ -63,7 +68,7 @@ app.get("/catalog/tv/channels.json", async (_req, reply) => {
       return {
         id: stremioId(channel.id),
         type: "tv",
-        name: channel.name,
+        name: catalogItemName(channel.name, view?.nowTitle),
         poster: view?.poster,
         posterShape: "square",
         background: view?.background,
@@ -71,8 +76,9 @@ app.get("/catalog/tv/channels.json", async (_req, reply) => {
       };
     }),
   );
-  // Short cache so the catalog's "now playing" text tracks the schedule.
-  reply.header("Cache-Control", "max-age=60");
+  // Stremio does not poll an open catalog, but requiring revalidation makes returning
+  // to it fetch the current show rather than reuse a stale card label.
+  reply.header("Cache-Control", "no-cache, max-age=0, must-revalidate");
   return { metas };
 });
 

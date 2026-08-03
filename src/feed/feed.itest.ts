@@ -398,6 +398,52 @@ describe("feed pipeline", { timeout: 180_000 }, () => {
     await sleep(500);
   });
 
+  it("does not mistake buffering at a program boundary for a viewer pause", async () => {
+    const dataDir = join(root, "boundary-buffering");
+    const base = testConfig(dataDir);
+    const config = testConfig(dataDir, {
+      hls: { ...base.hls, pauseDetectSeconds: 1 },
+    });
+    const recorder = recordingLogger();
+    const queue = queueProvider([
+      {
+        title: "Outgoing",
+        source: { url: clipA, offsetSeconds: 0, durationSeconds: PROGRAM_SECONDS, hasAudio: true },
+      },
+      {
+        title: "Incoming",
+        source: { url: clipB, offsetSeconds: 10, durationSeconds: 60, hasAudio: true },
+      },
+    ]);
+    const feed = new PlaybackSession(
+      "boundary-buffering",
+      "test",
+      config,
+      queue.provider,
+      recorder.log,
+    );
+
+    await feed.ensureStarted();
+    feed.markClaimed();
+    const playing = setInterval(() => feed.touch("segment"), 300);
+    await waitUntil(() => segmentCount(feed) >= 3, "the first program produced no segments");
+    await recorder.waitFor(/airing "Incoming"/, 20_000);
+
+    // At a real remote-source handoff the old buffer can run dry before the new source
+    // yields segments. Stremio keeps polling the playlist during that interval, exactly
+    // as it does for a deliberate pause. The one-second detector must not kill the new
+    // encoder while it is still inside its transition grace period.
+    clearInterval(playing);
+    const polling = setInterval(() => feed.touch("playlist"), 300);
+    await sleep(3500);
+    assert.equal(feed.isPaused, false, "the program handoff was misclassified as a pause");
+
+    clearInterval(polling);
+    feed.stop("test complete");
+    await sleep(500);
+    assert.equal(recorder.matching(/viewer paused; encoder stopped/).length, 0);
+  });
+
   it("keeps a second viewer advancing while the first viewer is paused", async () => {
     const dataDir = join(root, "two-viewers");
     const base = testConfig(dataDir);

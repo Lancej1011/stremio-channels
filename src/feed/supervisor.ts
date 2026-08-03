@@ -45,6 +45,19 @@ const GAP_SLATE_SECONDS = 15;
 /** Below this the encoder is not worth spawning; skip to the next program instead. */
 const MIN_PROGRAM_SECONDS = 5;
 /**
+ * A source that has not emitted a single transport-stream byte cannot produce an HLS
+ * playlist.  Do not let it occupy a playback session forever: terminate it and let the
+ * normal signal-loss slate keep the channel playable while the next lookup retries.
+ */
+const ENCODER_STARTUP_TIMEOUT_MS = 12_000;
+/**
+ * A player can exhaust the outgoing program's HLS window while the next source opens.
+ * During that gap it polls the playlist without requesting segments, which looks exactly
+ * like a pause. Protect each encoder handoff long enough for source startup plus two new
+ * segments, then let normal pause detection take over again.
+ */
+const TRANSITION_SEGMENTS_BEFORE_PAUSE = 2;
+/**
  * MPEG-TS timestamps wrap at 2^33/90000 ≈ 26.5 hours. Recycling the pipeline well
  * before that avoids the wrap entirely.
  */
@@ -100,6 +113,10 @@ export class PlaybackSession {
   private claimed = false;
   /** A real segment request has arrived since this pipeline started. */
   private playbackStarted = false;
+  /** Number of encoder runs in this pipeline; only runs after the first are handoffs. */
+  private encoderRuns = 0;
+  /** Pause detection is suppressed until this time while a new source starts. */
+  private pauseGuardUntil = 0;
 
   /** When the viewer paused, or null while running normally. */
   private frozenAt: number | null = null;
@@ -264,6 +281,8 @@ export class PlaybackSession {
     this.lastAccess = Date.now();
     this.lastSegmentAccess = this.lastAccess;
     this.playbackStarted = false;
+    this.encoderRuns = 0;
+    this.pauseGuardUntil = 0;
     this.running = true;
     this.stopping = false;
     this.cursor = 0;
@@ -453,11 +472,18 @@ export class PlaybackSession {
       return;
     }
 
-    if (code !== 0 && !this.stopping && this.running) {
+    // A direct-download host can close a connection cleanly before sending enough media
+    // for the requested slot. ffmpeg reports that as exit code 0, but accepting it as a
+    // completed program leaves the packager with no playlist and immediately retries the
+    // same source. Treat a materially short run exactly like an encoder failure.
+    const endedEarly = elapsed + 2 < next.source.durationSeconds;
+    if ((code !== 0 || endedEarly) && !this.stopping && this.running) {
       this.cursor += elapsed;
       const remaining = next.source.durationSeconds - elapsed;
 
-      this.log.warn(`encoder for "${next.title}" exited ${code} after ${fmt(elapsed)}`);
+      this.log.warn(
+        `encoder for "${next.title}" ${endedEarly ? "ended early" : `exited ${code}`} after ${fmt(elapsed)}`,
+      );
       // The encoder may have died immediately (dead URL) or partway through. The cursor is
       // already advanced by what it produced; let the slate cover the rest of the slot.
       if (remaining > MIN_PROGRAM_SECONDS) {
@@ -519,21 +545,39 @@ export class PlaybackSession {
         return;
       }
 
+      if (this.encoderRuns > 0) {
+        this.pauseGuardUntil = Date.now() + ENCODER_STARTUP_TIMEOUT_MS +
+          TRANSITION_SEGMENTS_BEFORE_PAUSE * this.config.hls.segmentSeconds * 1000;
+      }
+      this.encoderRuns += 1;
+
       const proc = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
       this.encoder = proc;
+      let emittedOutput = false;
+      const startupTimer = setTimeout(() => {
+        if (emittedOutput || !this.isAlive(proc)) return;
+        this.log.warn(`${label}: no output after ${ENCODER_STARTUP_TIMEOUT_MS / 1000}s; retrying`);
+        proc.kill("SIGTERM");
+      }, ENCODER_STARTUP_TIMEOUT_MS);
 
       // end:false is what makes the handoff work — the packager's stdin must survive
       // this encoder so the next one can write into the same stream.
+      proc.stdout?.once("data", () => {
+        emittedOutput = true;
+        clearTimeout(startupTimer);
+      });
       proc.stdout?.pipe(this.packager.stdin, { end: false });
       proc.stderr?.on("data", (b: Buffer) => {
         const msg = b.toString().trim();
         if (msg) this.log.warn(`${label}: ${msg}`);
       });
       proc.on("error", (err) => {
+        clearTimeout(startupTimer);
         this.log.error(`failed to spawn encoder for ${label}`, err);
         resolve(-1);
       });
       proc.on("exit", (code) => {
+        clearTimeout(startupTimer);
         if (this.encoder === proc) this.encoder = null;
         resolve(code ?? -1);
       });
@@ -627,6 +671,7 @@ export class PlaybackSession {
       const window = this.config.hls.pauseDetectSeconds;
       if (
         this.frozenAt === null &&
+        Date.now() >= this.pauseGuardUntil &&
         this.secondsSinceSegment > window &&
         this.idleSeconds < window
       ) {

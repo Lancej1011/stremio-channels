@@ -213,12 +213,13 @@ and add channels gradually while watching the shared cooldown in **Ops**.
 
 ## Network presets
 
-Eight ready-made channels, each a lineup plus a daypart grid that mirrors how that kind of
+Nine ready-made channels, each a lineup plus a daypart grid that mirrors how that kind of
 network programmed its day:
 
 | Preset | Shape |
 | --- | --- |
-| 90s / 00s Cartoon Network | Morning cartoons, afternoon action, weirder stuff after dark |
+| Boomerang Classics | Scooby mysteries, Hanna-Barbera afternoons and late-night action |
+| Cartoon Network Classics & Hits | Cartoon Cartoons mornings, afternoon action, modern prime time |
 | Nick at Nite / classic sitcoms | Retro mornings, 90s staples weighted into prime time |
 | Adult Swim | Adult animation, weighted heavily to the small hours |
 | Sci-Fi channel | Anthology mornings, serialised prime time, overnight X-Files |
@@ -266,9 +267,11 @@ docker compose up -d --force-recreate
 Install `https://channels.example.ts.net/manifest.json` in Stremio. Tailscale access
 rules remain the authentication boundary. Do not use Tailscale Funnel for this release.
 
-Verified on Stremio desktop (flatpak 1.1.4): channels appear in the catalog with live
-now/next text, the player treats them as live, and the seek bar is correctly locked —
-you cannot scrub a channel, exactly as with real broadcast TV.
+Verified on Stremio desktop (flatpak 1.1.4): each catalog card is labeled with the channel
+and current show (for example, `90s Sitcoms • Seinfeld`), while selecting it shows the full
+now/next guide. Stremio does not update a catalog that remains open; leave and return to the
+catalog to refresh the labels. The player treats channels as live and the seek bar is
+correctly locked — you cannot scrub a channel, exactly as with real broadcast TV.
 
 Stremio's Android and Android TV players use ExoPlayer, which is stricter about HLS.
 Playback is verified on a Fire TV Stick 4K Max. Channels are served as a master playlist

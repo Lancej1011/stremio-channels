@@ -10,7 +10,19 @@
         { "type": "series", "id": "tt3230854" },
         { "type": "series", "id": "tt0303461" },
         { "type": "movie", "id": "tt1856101" },
-        { "type": "movie", "id": "tt0083658" }
+        { "type": "movie", "id": "tt0083658" },
+        { "type": "series", "id": "tt0407362" },
+        { "type": "series", "id": "tt0106179" },
+        { "type": "series", "id": "tt0092455" },
+        { "type": "series", "id": "tt0105946" },
+        { "type": "series", "id": "tt0187636" },
+        { "type": "series", "id": "tt0118480" },
+        { "type": "series", "id": "tt1119644" },
+        { "type": "series", "id": "tt4159076" },
+        { "type": "series", "id": "tt0804484" },
+        { "type": "series", "id": "tt14688458" },
+        { "type": "series", "id": "tt7772588" },
+        { "type": "series", "id": "tt2085059" }
       ]
     },
     {
@@ -22,7 +34,27 @@
       "content": [
         { "type": "series", "id": "tt0098904" },
         { "type": "series", "id": "tt0108778" },
-        { "type": "series", "id": "tt0106004", "season": 1 }
+        { "type": "series", "id": "tt0106004" },
+        { "type": "series", "id": "tt0098800" },
+        { "type": "series", "id": "tt0101120" },
+        { "type": "series", "id": "tt0105958" },
+        { "type": "series", "id": "tt0115167" },
+        { "type": "series", "id": "tt0106080" },
+        { "type": "series", "id": "tt0096579" },
+        { "type": "series", "id": "tt0092359" },
+        { "type": "series", "id": "tt0096694" },
+        { "type": "series", "id": "tt0106056" },
+        { "type": "series", "id": "tt0103488" },
+        { "type": "series", "id": "tt0115082" },
+        { "type": "series", "id": "tt0157246" },
+        { "type": "series", "id": "tt0165581" },
+        { "type": "series", "id": "tt0115341" },
+        { "type": "series", "id": "tt0101205" },
+        { "type": "series", "id": "tt0112095" },
+        { "type": "series", "id": "tt0115369" },
+        { "type": "series", "id": "tt0111945" },
+        { "type": "series", "id": "tt0098948" },
+        { "type": "series", "id": "tt0103484" }
       ]
     }
   ]
