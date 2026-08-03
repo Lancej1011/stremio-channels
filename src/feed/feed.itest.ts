@@ -346,7 +346,7 @@ describe("feed pipeline", { timeout: 180_000 }, () => {
     const polling = setInterval(() => feed.touch("playlist"), 400);
     await waitUntil(() => feed.isPaused, "playlist-only access did not freeze the encoder");
     // Let the packager flush the partial segment already in its pipe, then hold long enough
-    // that a wall-clock-based -re catch-up would be unmistakable after SIGCONT.
+    // that a wall-clock-based -re catch-up would be unmistakable after resume.
     await sleep(1500);
     const frozenCount = segmentCount(feed);
     await sleep(6000);
@@ -369,7 +369,7 @@ describe("feed pipeline", { timeout: 180_000 }, () => {
     const video = continuity(await packetsFrom(feed.directory, "v"));
     assert.ok(video.count > 0);
     assert.equal(video.maxBacktrackSeconds, 0, "video timestamps went backwards across resume");
-    assert.equal(recorder.matching(/viewer paused; encoder frozen/).length, 1);
+    assert.equal(recorder.matching(/viewer paused; encoder stopped/).length, 1);
     assert.equal(recorder.matching(/viewer resumed after/).length, 1);
   });
 

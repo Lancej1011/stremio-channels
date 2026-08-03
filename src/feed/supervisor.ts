@@ -101,8 +101,10 @@ export class PlaybackSession {
   /** A real segment request has arrived since this pipeline started. */
   private playbackStarted = false;
 
-  /** When the encoder was SIGSTOPped, or null while running normally. */
+  /** When the viewer paused, or null while running normally. */
   private frozenAt: number | null = null;
+  /** The current encoder was deliberately stopped and must be resumed from its offset. */
+  private restartAfterPause = false;
   /**
    * Frozen time within the current encoder run. Subtracted from wall-clock elapsed so the
    * cursor and the overrun check measure content produced, not time passed.
@@ -269,6 +271,7 @@ export class PlaybackSession {
     // accumulated is already gone.
     this.drift = 0;
     this.frozenThisProgram = 0;
+    this.restartAfterPause = false;
 
     // Read where the previous run got to *before* wiping the directory. This is all the
     // state the sequence needs, so it survives a process restart as well as an idle one.
@@ -306,12 +309,13 @@ export class PlaybackSession {
     // A frozen session must not be able to wedge shutdown: release anything waiting on a
     // resume that is never coming, and drop the freeze state so a restart begins clean.
     this.frozenAt = null;
+    this.restartAfterPause = false;
     const waiters = this.resumeWaiters;
     this.resumeWaiters = [];
     for (const resolve of waiters) resolve();
 
-    // SIGKILL is delivered to a SIGSTOPped process without needing SIGCONT first, so a
-    // paused viewer's encoder still dies here.
+    // The encoder is normally already gone while paused, but this also covers a pause
+    // signal that has not reached its exit handler yet.
     this.encoder?.kill("SIGKILL");
     this.encoder = null;
     this.packager?.stdin?.end();
@@ -426,22 +430,17 @@ export class PlaybackSession {
     const openFreeze = this.frozenAt === null ? 0 : (Date.now() - this.frozenAt) / 1000;
     const elapsed = (Date.now() - startedAt) / 1000 - this.frozenThisProgram - openFreeze;
 
-    if (code !== 0 && !this.stopping && this.running) {
+    // Pausing terminates the rate-limited encoder instead of SIGSTOPping it. Some ffmpeg
+    // versions try to catch their input clock up after SIGCONT, producing several HLS
+    // segments in a burst. A fresh process resumes at the measured content offset and
+    // starts with a clean -re clock, so output remains real-time on every supported host.
+    if (this.restartAfterPause && !this.stopping && this.running) {
       this.cursor += elapsed;
       const remaining = next.source.durationSeconds - elapsed;
-
-      // A suspended ffmpeg holds an idle connection to the source, and a long pause gives
-      // the far end every reason to drop it. Resuming into a "Signal lost" slate would be
-      // a poor reward for coming back, so wait for the viewer and pick the program up
-      // where it left off instead. Input-side -ss makes that a range request, not a
-      // re-decode.
-      if (this.frozenAt !== null && remaining > MIN_PROGRAM_SECONDS) {
-        this.log.warn(
-          `encoder for "${next.title}" exited ${code} while paused; ` +
-            `will resume from ${fmt(next.source.offsetSeconds + elapsed)}`,
-        );
-        await this.waitForResume();
-        if (!this.running) return;
+      await this.waitForResume();
+      if (!this.running) return;
+      this.restartAfterPause = false;
+      if (remaining > MIN_PROGRAM_SECONDS) {
         return this.pushProgram({
           title: next.title,
           source: {
@@ -451,6 +450,12 @@ export class PlaybackSession {
           },
         });
       }
+      return;
+    }
+
+    if (code !== 0 && !this.stopping && this.running) {
+      this.cursor += elapsed;
+      const remaining = next.source.durationSeconds - elapsed;
 
       this.log.warn(`encoder for "${next.title}" exited ${code} after ${fmt(elapsed)}`);
       // The encoder may have died immediately (dead URL) or partway through. The cursor is
@@ -489,7 +494,21 @@ export class PlaybackSession {
     );
     // Slates are dead air. They should be rare, so log them where they will be noticed.
     this.log.info(`slate "${text}" for ${fmt(rounded)}`);
+    const startedAt = Date.now();
+    this.frozenThisProgram = 0;
     await this.runEncoder(args, "slate");
+    const openFreeze = this.frozenAt === null ? 0 : (Date.now() - this.frozenAt) / 1000;
+    const elapsed = (Date.now() - startedAt) / 1000 - this.frozenThisProgram - openFreeze;
+
+    if (this.restartAfterPause && !this.stopping && this.running) {
+      this.cursor += elapsed;
+      const remaining = rounded - elapsed;
+      await this.waitForResume();
+      if (!this.running) return;
+      this.restartAfterPause = false;
+      if (remaining >= seg) await this.pushSlate(text, remaining);
+      return;
+    }
     this.cursor += rounded;
   }
 
@@ -522,15 +541,17 @@ export class PlaybackSession {
   }
 
   /**
-   * Suspends the encoder while the viewer is paused.
+   * Stops the encoder while the viewer is paused.
    *
    * Nothing is produced during a freeze, so there is no buffer to accumulate and no live
    * edge to fall behind: the playlist simply stops advancing, leaving its last segment —
    * the frame the viewer paused on — as the newest thing available. That is what makes an
    * arbitrarily long pause cost nothing and lose nothing.
    *
-   * Only the encoder is signalled. The packager must stay up to keep serving the playlist
-   * it has already written; with no input it just writes nothing more.
+   * Only the encoder is stopped. The packager stays up to serve the playlist it has
+   * already written; with no input it simply writes nothing more. Resume creates a new
+   * rate-limited encoder at the exact source offset, avoiding ffmpeg's SIGCONT catch-up
+   * behavior on fast machines.
    */
   private freeze(): void {
     if (this.frozenAt !== null) return;
@@ -543,14 +564,21 @@ export class PlaybackSession {
     const proc = this.encoder;
     if (!proc || !this.isAlive(proc)) return;
 
+    this.frozenAt = Date.now();
+    this.restartAfterPause = true;
     try {
-      proc.kill("SIGSTOP");
+      if (!proc.kill("SIGKILL")) {
+        this.frozenAt = null;
+        this.restartAfterPause = false;
+        return;
+      }
     } catch (err) {
       this.log.warn(`could not freeze encoder: ${String(err)}`);
+      this.frozenAt = null;
+      this.restartAfterPause = false;
       return;
     }
-    this.frozenAt = Date.now();
-    this.log.info("viewer paused; encoder frozen");
+    this.log.info("viewer paused; encoder stopped");
   }
 
   /** Settles when the viewer resumes, or immediately if they are not paused. */
@@ -568,25 +596,18 @@ export class PlaybackSession {
     this.frozenThisProgram += frozenFor;
     this.drift += frozenFor;
 
-    const proc = this.encoder;
-    if (proc && this.isAlive(proc)) {
-      try {
-        proc.kill("SIGCONT");
-      } catch (err) {
-        this.log.warn(`could not thaw encoder: ${String(err)}`);
-      }
-    }
-    this.log.info(`viewer resumed after ${fmt(frozenFor)} (drift ${fmt(this.drift)})`);
+    this.log.info(
+      `viewer resumed after ${fmt(frozenFor)} (drift ${fmt(this.drift)}); restarting encoder`,
+    );
 
-    // Releases pushProgram if the encoder died mid-freeze and it is waiting to respawn.
+    // Releases the interrupted program or slate so it can respawn its encoder.
     const waiters = this.resumeWaiters;
     this.resumeWaiters = [];
     for (const resolve of waiters) resolve();
   }
 
   /**
-   * Distinguishes a stopped process from a dead one. `killed` is unusable here: Node sets
-   * it after *any* signal, including the SIGSTOP that merely suspends the process.
+   * Distinguishes a running process from one whose exit has already been observed.
    */
   private isAlive(proc: ChildProcess): boolean {
     return proc.exitCode === null && proc.signalCode === null;
