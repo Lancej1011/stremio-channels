@@ -219,6 +219,59 @@ describe("schedule generation", { timeout: 180_000 }, () => {
     db.close();
   });
 
+  it("moves past an unavailable title at a daypart boundary", async () => {
+    const dataDir = join(root, "unavailable-boundary");
+    const db = openDb(dataDir);
+    const movies = ["tt5000301", "tt5000302"];
+    for (const [index, id] of movies.entries()) {
+      db.putCached(`cinemeta:movie:${id}`, {
+        id,
+        name: `Test Movie ${index + 1}`,
+        runtime: "5 min",
+      });
+    }
+
+    let unavailable: string | null = null;
+    const attempts: string[] = [];
+    const resolver: StreamResolver = {
+      name: "one-unavailable",
+      async resolve(ref): Promise<ResolvedStream | null> {
+        attempts.push(ref.id);
+        unavailable ??= ref.id;
+        if (ref.id === unavailable) return null;
+        return { url: clip, expiresAt: Date.now() + 3600_000, label: "stub" };
+      },
+    };
+    const config = testConfig(dataDir, { scheduleHorizonHours: 0.25 });
+    const def = channel({
+      strategy: "shuffle",
+      content: movies.map((id) => ({ type: "movie" as const, id })),
+      dayparts: [{ name: "Late", start: clockOffset(15), end: clockOffset(180) }],
+    });
+    const gen = new ScheduleGenerator(def, db, new Cinemeta(db), resolver, config);
+
+    await gen.ensureHorizon();
+
+    const programs = db.programsFrom("gen", 0, 1000);
+    assert.ok(programs.length >= 3, `only ${programs.length} programs were scheduled`);
+    assert.ok(unavailable);
+    assert.ok(
+      attempts.includes(movies.find((id) => id !== unavailable)!),
+      `the generator never moved past unavailable ${unavailable}: ${attempts.join(", ")}`,
+    );
+    assert.ok(
+      attempts.length < 30,
+      `the unavailable title was retried without making progress: ${attempts.join(", ")}`,
+    );
+    assert.equal(
+      db.counter("gen", `ep:${SERIES}`),
+      0,
+      "skipping a movie unexpectedly consumed a series episode counter",
+    );
+
+    db.close();
+  });
+
   it("stops a disposed generator from appending alongside its replacement", async () => {
     const dataDir = join(root, "dispose");
     const db = openDb(dataDir);

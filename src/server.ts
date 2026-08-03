@@ -17,7 +17,7 @@ import { buildManifest, channelIdFromStremioId, stremioId } from "./addon/manife
 import { cooldownRemainingSeconds } from "./content/providers/torbox.ts";
 import { logger } from "./log.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const log = logger("server");
 
 const config = loadConfig();

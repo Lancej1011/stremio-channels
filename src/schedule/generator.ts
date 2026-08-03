@@ -43,6 +43,8 @@ interface Selection {
   daypart: string | null;
   blockId: string | null;
   strategy: ChannelDef["strategy"];
+  /** Advances the title rotation even when this particular title is unavailable. */
+  slotKey: string;
   /** Counter keys this pick consumed, applied only once the program is really scheduled. */
   bumps: string[];
 }
@@ -246,7 +248,14 @@ export class ScheduleGenerator {
 
     const finish = (ref: ContentRef): Selection => {
       for (const key of bumps) pending.bump(key);
-      return { ref, daypart: block.name, blockId: block.id, strategy: block.strategy, bumps };
+      return {
+        ref,
+        daypart: block.name,
+        blockId: block.id,
+        strategy: block.strategy,
+        slotKey,
+        bumps,
+      };
     };
 
     if (!advancesEpisodes(block.strategy) && block.strategy !== "weighted") {
@@ -469,21 +478,18 @@ export class ScheduleGenerator {
               }),
         ),
       );
-      if (resolved.every((r) => r === null)) {
-        slot += RESOLVE_BATCH;
-        failures += RESOLVE_BATCH;
-        continue;
-      }
-      failures = 0;
-
       // Resolving takes many seconds; a reload during that window means these rows no
       // longer belong to the live config and must not be written.
       if (this.disposed) return;
 
       let placed = 0;
+      let consumed = 0;
       for (const [i, item] of resolved.entries()) {
         const selection = selections[i];
-        if (!item || !selection) continue;
+        if (!selection) {
+          consumed++;
+          continue;
+        }
 
         // The batch was chosen against estimated start times. Now that the real one is
         // known, check it still belongs to the block it was picked for — otherwise the
@@ -502,6 +508,15 @@ export class ScheduleGenerator {
           break;
         }
 
+        consumed++;
+        if (!item) {
+          // A resolver miss must consume the title position or the next pass selects the
+          // same unavailable title forever. Do not consume an episode counter: an episode
+          // that never aired still has to remain next for sequential channels.
+          pending.commit([selection.slotKey]);
+          continue;
+        }
+
         // Counters are written only now, so anything discarded above never consumed an
         // episode and nothing is skipped.
         pending.commit(selection.bumps);
@@ -517,9 +532,11 @@ export class ScheduleGenerator {
         this.releaseWaiters(cursor);
       }
 
-      // Only advance past the slots that actually aired; truncated ones get re-selected
-      // against their true start time on the next pass.
-      slot += Math.max(1, placed);
+      // Failed resolver picks and aired programs are consumed. Picks truncated at a
+      // daypart boundary are not: they must be selected again against their true block.
+      slot += Math.max(1, consumed);
+      if (placed > 0) failures = 0;
+      else failures += Math.max(1, consumed);
     }
 
     if (failures >= MAX_CONSECUTIVE_FAILURES) {

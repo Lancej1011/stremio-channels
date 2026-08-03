@@ -1,6 +1,6 @@
 {
   "name": "stremio-channels",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clock-synced linear TV channels for Stremio, programmed from debrid sources",
   "license": "MIT",
   "private": true,
