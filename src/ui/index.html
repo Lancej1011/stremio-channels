@@ -1579,6 +1579,22 @@ function renderFilters() {
   }, "New channel"));
 }
 
+/**
+ * Marks channels whose debrid links are resolved at tune-in rather than kept warm. Not a
+ * fault — it is the server declining to spend API calls on a channel nobody is watching —
+ * so it reads as a quiet note, not a status colour.
+ */
+function onDemand(channelId) {
+  const entry = state.status?.channels.find((c) => c.id === channelId);
+  if (!entry || entry.active !== false) return null;
+  return el("div", {
+    className: "mono",
+    style: "font-size:10px;letter-spacing:.08em;color:var(--faint)",
+    title: "Links for this channel are resolved when you tune in, so the first few seconds "
+      + "take slightly longer. Channels you watch are kept ready.",
+  }, "ON DEMAND");
+}
+
 function channelCard(channel) {
   const status = channelStatus(channel.id);
   const { current, next, progress } = nowNext(channel.id);
@@ -1606,6 +1622,7 @@ function channelCard(channel) {
           el("span", { className: "status-chip", style: `margin-left:auto;color:${status.color}` }, status.label),
         ]),
         el("div", { className: "ch-meta truncate", title: meta }, meta),
+        onDemand(channel.id),
         el("div", { className: "ch-nownext" }, offAir
           ? [el("div", { className: "dim", style: "font-size:12.5px" }, "Off air — schedule ready")]
           : [

@@ -50,6 +50,12 @@ export class ChannelService {
   private readonly generators = new Map<string, ScheduleGenerator>();
   private readonly cinemeta: Cinemeta;
   private readonly resolver: StreamResolver | null;
+  /**
+   * When each channel last aired a program to a viewer. Written by `programProvider`,
+   * which the supervisor calls at tune-in and at every program boundary, so it records
+   * genuine demand rather than mere interest from the admin UI or the catalog.
+   */
+  private readonly lastWatched = new Map<string, number>();
 
   constructor(
     private channels: ChannelDef[],
@@ -288,15 +294,32 @@ export class ChannelService {
   }
 
   /**
-   * Keeps the currently airing and next program's links valid on every channel.
+   * Whether a channel is worth preparing links for: playing right now, or watched recently
+   * enough that the viewer is likely to come back to it.
+   */
+  isChannelActive(channelId: string, now = Date.now()): boolean {
+    if (this.config.linkKeeperScope === "all") return true;
+    if (this.feeds.isChannelLive(channelId)) return true;
+    const last = this.lastWatched.get(channelId);
+    return last !== undefined && now - last < this.config.linkKeeperGraceMinutes * 60_000;
+  }
+
+  /**
+   * Keeps the currently airing and next program's links valid on the channels in use.
    *
    * Debrid links last a few hours but the schedule is built a day ahead, so most programs
    * would otherwise need refreshing at the moment someone tunes in — putting a debrid
    * round trip directly in the path of pressing play. Doing it on a timer moves that cost
    * off the critical path entirely.
+   *
+   * Doing it for *every* channel, though, spends that budget on channels nobody is
+   * watching: with a large lineup it is a constant stream of link requests against a rate
+   * limited API, and it fills the debrid account with entries for shows never viewed.
+   * A cold channel resolves on demand at tune-in instead, which costs a few seconds once.
    */
   async refreshUpcomingLinks(): Promise<void> {
     for (const channel of this.channels) {
+      if (!this.isChannelActive(channel.id)) continue;
       const gen = this.generators.get(channel.id);
       if (!gen) continue;
 
@@ -308,6 +331,18 @@ export class ChannelService {
         await gen.freshUrl(entry.program).catch(() => null);
       }
     }
+  }
+
+  /**
+   * Readies the link for whatever airs at `fromMs`, so the next program boundary does not
+   * pay a debrid round trip. A no-op when the stored link is still valid.
+   */
+  private async prewarmNext(channelId: string, fromMs: number): Promise<void> {
+    const gen = this.generators.get(channelId);
+    if (!gen) return;
+    const [next] = getGuide(this.db, channelId, fromMs, 1);
+    if (!next) return;
+    await gen.freshUrl(next.program).catch(() => null);
   }
 
   startLinkKeeper(): NodeJS.Timeout {
@@ -351,8 +386,11 @@ export class ChannelService {
     targetThrough: number;
     progress: number;
     detail: string | null;
+    /** False when links are resolved on demand rather than kept warm ahead of time. */
+    active: boolean;
   } {
     const now = Date.now();
+    const active = this.isChannelActive(channelId, now);
     const targetThrough = now + this.config.scheduleHorizonHours * 3600_000;
     const scheduledThrough = this.db.timelineEnd(channelId).endMs;
     const generator = this.generators.get(channelId)?.status();
@@ -362,7 +400,7 @@ export class ChannelService {
     const cooldown = cooldownRemainingSeconds();
 
     if (hasCurrent) {
-      return { state: "ready", scheduledThrough, targetThrough, progress, detail: null };
+      return { state: "ready", scheduledThrough, targetThrough, progress, detail: null, active };
     }
     if (cooldown > 0) {
       return {
@@ -371,6 +409,7 @@ export class ChannelService {
         targetThrough,
         progress,
         detail: `retrying after TorBox cooldown (${cooldown}s)`,
+        active,
       };
     }
     if (generator?.lastFailure) {
@@ -380,6 +419,7 @@ export class ChannelService {
         targetThrough,
         progress,
         detail: generator.lastFailure,
+        active,
       };
     }
     return {
@@ -388,6 +428,7 @@ export class ChannelService {
       targetThrough,
       progress,
       detail: generator?.generating ? "preparing the first playable slot" : "queued for preparation",
+      active,
     };
   }
 
@@ -404,6 +445,10 @@ export class ChannelService {
     return async (): Promise<NextProgram | null> => {
       const gen = this.generators.get(channelId);
       if (!gen) return null;
+
+      // Reaching here means a viewer is actually being served, which is what keeps this
+      // channel in the link keeper's working set.
+      this.lastWatched.set(channelId, Date.now());
 
       // Wait only for the current moment to be scheduled. On a cold channel the full
       // horizon takes minutes to build, and a viewer should not wait for all of it.
@@ -431,6 +476,11 @@ export class ChannelService {
         log.warn(`${channelId}: no link for "${now.program.title}"`);
         return null;
       }
+
+      // Get the next program's link ready while this one plays. On a cold channel the
+      // link keeper has not prepared anything, and resolving at the boundary would stall
+      // the transition. Deliberately not awaited: playback must not wait on it.
+      void this.prewarmNext(channelId, now.program.start_ms + now.program.duration_ms);
 
       let probe = this.db.getProbe(now.program.ref_key);
       // Rows created before language-aware probing know that audio exists but not which

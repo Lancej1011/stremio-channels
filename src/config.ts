@@ -374,6 +374,19 @@ const configSchema = z.object({
   maxSessions: z.coerce.number().int().positive().default(6),
   /** How far ahead the scheduler keeps the timeline filled. */
   scheduleHorizonHours: z.number().default(24),
+  /**
+   * Which channels the link keeper tops up ahead of time. Debrid links are short lived,
+   * so keeping every channel ready costs a steady stream of API calls for channels nobody
+   * watches. `watched` limits that to channels currently playing or watched recently;
+   * `all` restores the original behaviour of preparing every channel.
+   */
+  linkKeeperScope: z.enum(["watched", "all"]).default("watched"),
+  /**
+   * How long a channel stays "recently watched" after its last program boundary. Covers
+   * channel surfing and coming straight back, so a regular does not go cold between
+   * viewings. Only meaningful when `linkKeeperScope` is `watched`.
+   */
+  linkKeeperGraceMinutes: z.coerce.number().nonnegative().default(30),
   /** Force an encoder to `hwaccel` value: auto | nvenc | qsv | vaapi | cpu. */
   encoder: z.enum(["auto", "nvenc", "qsv", "vaapi", "cpu"]).default("auto"),
 });
