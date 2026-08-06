@@ -642,6 +642,14 @@
 
     <section id="view-channels" class="view">
       <div class="page">
+        <div class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <span class="dim" style="font-size:12px;margin-right:auto">
+            Guides are programming only — titles, order and dayparts. They carry no keys,
+            and whoever imports one uses their own debrid account.
+          </span>
+          <button type="button" class="btn btn--sm" id="share-export">Export guide</button>
+          <button type="button" class="btn btn--sm" id="share-import">Import guide</button>
+        </div>
         <div class="filters" id="channel-filters"></div>
         <div id="channel-cards"></div>
       </div>
@@ -837,6 +845,40 @@
     <button type="button" class="btn" id="creator-cancel">Cancel</button>
     <button type="button" class="btn" id="creator-back">Back</button>
     <button type="button" class="btn btn--primary" id="creator-next">Next</button>
+  </div>
+</dialog>
+
+<dialog id="share" style="max-width:720px">
+  <div class="dlg-head">
+    <div>
+      <h2 style="font-size:15px">Import a channel guide</h2>
+      <div class="dim" style="font-size:12px">Paste a guide, or link to one someone published.</div>
+    </div>
+  </div>
+  <div class="dlg-body">
+    <label class="field">Guide URL
+      <input type="url" id="share-url" placeholder="https://gist.githubusercontent.com/.../raw/guide.json">
+    </label>
+    <div class="dim" style="font-size:11.5px;margin:6px 0 14px">
+      Link to the raw file, not a web page. Leave blank to paste below instead.
+    </div>
+    <label class="field">Or paste the guide
+      <textarea id="share-json" rows="8" spellcheck="false"
+        placeholder='{"kind":"headend.channels","version":1,"channels":[...]}'></textarea>
+    </label>
+    <label class="field" style="margin-top:14px">If a channel id already exists
+      <select id="share-mode">
+        <option value="rename">Keep both — give the imported one a new id</option>
+        <option value="add">Stop and tell me</option>
+        <option value="replace">Replace mine with theirs</option>
+      </select>
+    </label>
+    <div id="share-result" class="mono" style="font-size:11.5px;margin-top:14px"></div>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" id="share-cancel">Cancel</button>
+    <button type="button" class="btn" id="share-preview">Preview</button>
+    <button type="button" class="btn btn--primary" id="share-apply">Import</button>
   </div>
 </dialog>
 
@@ -2168,6 +2210,92 @@ function previewChannel(id) {
   go("ops");
   selectOpsChannel(id);
   startPreview();
+}
+
+// ------------------------------------------------------------------ sharing
+
+$("#share-export").addEventListener("click", async () => {
+  try {
+    const bundle = await api("/api/channels/export");
+    const text = JSON.stringify(bundle, null, 2);
+    const stamp = new Date().toISOString().slice(0, 10);
+    // A download rather than the clipboard: a full lineup is far past what people are
+    // willing to paste around, and a file is what gets attached to a message or gist.
+    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    const link = Object.assign(document.createElement("a"), {
+      href: url,
+      download: `headend-guide-${stamp}.json`,
+    });
+    link.click();
+    URL.revokeObjectURL(url);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Exported ${bundle.channels.length} channels — file saved and copied`);
+    } catch {
+      // Clipboard needs a secure context, which http://192.168.x is not. The file is
+      // already saved, so this is not a failure worth reporting as one.
+      toast(`Exported ${bundle.channels.length} channels`);
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$("#share-import").addEventListener("click", () => {
+  $("#share-result").textContent = "";
+  $("#share").showModal();
+});
+$("#share-cancel").addEventListener("click", () => $("#share").close());
+$("#share-preview").addEventListener("click", () => void runImport(true));
+$("#share-apply").addEventListener("click", () => void runImport(false));
+
+async function runImport(dryRun) {
+  const url = $("#share-url").value.trim();
+  const raw = $("#share-json").value.trim();
+  const out = $("#share-result");
+
+  if (!url && !raw) return toast("Paste a guide or give a URL", true);
+  if (url && raw) return toast("Use a URL or a pasted guide, not both", true);
+
+  const payload = { mode: $("#share-mode").value, dryRun };
+  if (url) payload.url = url;
+  else {
+    try {
+      payload.bundle = JSON.parse(raw);
+    } catch {
+      return toast("That is not valid JSON", true);
+    }
+  }
+
+  out.textContent = dryRun ? "Checking…" : "Importing…";
+  try {
+    const res = await api("/api/channels/import", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const lines = [];
+    if (res.note) lines.push(`Note from the author: ${res.note}`);
+    if (res.added.length) lines.push(`Add: ${res.added.join(", ")}`);
+    if (res.replaced.length) lines.push(`Replace: ${res.replaced.join(", ")}`);
+    for (const r of res.renamed) lines.push(`Rename: ${r.from} → ${r.to}`);
+    if (!lines.length) lines.push("Nothing to change.");
+    out.textContent = lines.join("\n");
+
+    if (!dryRun) {
+      toast(`Imported ${res.added.length + res.replaced.length + res.renamed.length} channels`);
+      $("#share").close();
+      $("#share-url").value = "";
+      $("#share-json").value = "";
+      await refreshChannels();
+    }
+  } catch (err) {
+    // A conflict is the one error worth spelling out, because there is a specific next
+    // step: switch mode and try again.
+    out.textContent = err.body?.conflicts
+      ? `Already have: ${err.body.conflicts.join(", ")}\n${err.body.hint ?? ""}`
+      : err.message;
+    toast(err.message, true);
+  }
 }
 
 $("#preview-play").addEventListener("click", startPreview);

@@ -98,14 +98,22 @@ class HeadendWindow(Gtk.ApplicationWindow):
         self.header.pack_start(self.guide_button)
         self.header.pack_start(self.next_button)
 
+        # The editor lives on the same origin as the viewer, so it loads in this window
+        # without loosening the navigation policy below. It is also the only place channel
+        # guides can be imported or exported, since those endpoints are local-only.
+        self.editor_button = Gtk.Button.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON)
+        self.editor_button.set_tooltip_text("Channel editor — import and export guides")
+        self.editor_button.connect("clicked", lambda _button: self._open_editor())
+
         self.reload_button = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-        self.reload_button.set_tooltip_text("Reload Headend")
+        self.reload_button.set_tooltip_text("Back to the viewer")
         self.reload_button.connect("clicked", lambda _button: self._connect_service())
         self.fullscreen_button = Gtk.Button.new_from_icon_name("view-fullscreen-symbolic", Gtk.IconSize.BUTTON)
         self.fullscreen_button.set_tooltip_text("Fullscreen (F11)")
         self.fullscreen_button.connect("clicked", lambda _button: self.toggle_fullscreen())
         self.header.pack_end(self.fullscreen_button)
         self.header.pack_end(self.reload_button)
+        self.header.pack_end(self.editor_button)
 
         self.overlay = Gtk.Overlay()
         self.add(self.overlay)
@@ -173,6 +181,10 @@ class HeadendWindow(Gtk.ApplicationWindow):
     def _connect_service(self) -> None:
         self._set_status("Starting Headend", "Checking the local channel service…")
         threading.Thread(target=self._probe_service, daemon=True).start()
+
+    def _open_editor(self) -> None:
+        """Loads the channel editor in place. The refresh button returns to the viewer."""
+        self.webview.load_uri(f"{self.allowed_origin}/ui")
 
     def _probe_service(self) -> None:
         if not self._reachable():

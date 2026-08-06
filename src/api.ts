@@ -11,6 +11,12 @@ import {
   type Config,
 } from "./config.ts";
 import { urlPrefix } from "./access.ts";
+import {
+  buildBundle,
+  ImportConflictError,
+  mergeImported,
+  parseBundle,
+} from "./channels-share.ts";
 import { fetchSource, MissingCredentialError, requiredSetting } from "./content/sources/index.ts";
 import {
   fetchTmdbSimilar,
@@ -38,6 +44,51 @@ const MOVIE_GENRES = [
 const SERIES_GENRES = [
   ...MOVIE_GENRES, "Reality-TV", "Talk-Show", "Game-Show",
 ];
+
+/** A shared guide should be small; this is orders of magnitude above a real one. */
+const MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Fetches a guide someone published.
+ *
+ * Deliberately not guarded against pointing at a private address: this endpoint is only
+ * reachable from the machine itself or a host the operator named in `trustedHosts`, so
+ * anyone who can call it could equally run `curl`. Blocking LAN URLs would stop someone
+ * hosting guides on their own network while closing nothing.
+ */
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchBundle(url: string): Promise<unknown> {
+  // Re-checked rather than assumed: this function must stay safe if it gains another
+  // caller that has not validated its input.
+  if (!isHttpUrl(url)) throw new Error("guide URL must be http or https");
+
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(15_000),
+    headers: { accept: "application/json, text/plain" },
+  });
+  if (!res.ok) throw new Error(`guide URL returned ${res.status}`);
+
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > MAX_BUNDLE_BYTES) throw new Error("guide is too large");
+
+  const text = await res.text();
+  if (text.length > MAX_BUNDLE_BYTES) throw new Error("guide is too large");
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // A GitHub blob page rather than the raw file is the overwhelmingly likely mistake.
+    throw new Error("guide URL did not return JSON — link to the raw file, not a web page");
+  }
+}
 
 export function registerApi(
   app: FastifyInstance,
@@ -81,6 +132,106 @@ export function registerApi(
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
+  });
+
+  // ------------------------------------------------------------------ sharing
+
+  /**
+   * A guide someone else can import. `ids` selects a subset; omitting it exports the whole
+   * lineup. Safe to publish: channels carry programming, never credentials.
+   */
+  app.get<{ Querystring: { ids?: string } }>("/api/channels/export", async (req, reply) => {
+    const wanted = (req.query.ids ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+    const all = service.list();
+    const channels = wanted.length > 0 ? all.filter((c) => wanted.includes(c.id)) : all;
+
+    if (channels.length === 0) {
+      return reply.code(404).send({ error: "no matching channels to export" });
+    }
+    const missing = wanted.filter((id) => !all.some((c) => c.id === id));
+    if (missing.length > 0) {
+      return reply.code(404).send({ error: `no such channel: ${missing.join(", ")}` });
+    }
+
+    reply.header("Cache-Control", "no-store");
+    return buildBundle(channels);
+  });
+
+  app.post<{ Body: unknown }>("/api/channels/import", async (req, reply) => {
+    const body = z.object({
+      // Exactly one source. A pasted bundle is the common case; a URL is what makes
+      // "here's my lineup" a link someone can send.
+      bundle: z.unknown().optional(),
+      // `.url()` alone also accepts file: and ftp:, which are a bad request rather than
+      // an upstream failure, so the scheme is checked here to get a 400 not a 502.
+      url: z.string().url().refine(isHttpUrl, "guide URL must be http or https").optional(),
+      mode: z.enum(["add", "replace", "rename"]).default("add"),
+      /** Preview the outcome without writing anything. */
+      dryRun: z.boolean().default(false),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid import request" });
+
+    const { url, mode, dryRun } = body.data;
+    if ((body.data.bundle === undefined) === (url === undefined)) {
+      return reply.code(400).send({ error: "provide either a bundle or a url, not both" });
+    }
+
+    let raw: unknown = body.data.bundle;
+    if (url !== undefined) {
+      try {
+        raw = await fetchBundle(url);
+      } catch (err) {
+        return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    let bundle;
+    try {
+      bundle = parseBundle(raw);
+    } catch (err) {
+      return reply.code(400).send({
+        error: "not a Headend channel guide",
+        detail: err instanceof z.ZodError ? err.issues : String(err),
+      });
+    }
+
+    // Two channels sharing an id inside one bundle would silently drop one on write.
+    const ids = bundle.channels.map((c) => c.id);
+    const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
+    if (duplicate) {
+      return reply.code(400).send({ error: `guide contains duplicate channel id: ${duplicate}` });
+    }
+
+    let merged;
+    try {
+      merged = mergeImported(service.list(), bundle.channels, mode);
+    } catch (err) {
+      if (err instanceof ImportConflictError) {
+        return reply.code(409).send({
+          error: "some channels already exist",
+          conflicts: err.ids,
+          hint: "import again with mode 'rename' to keep both, or 'replace' to overwrite",
+        });
+      }
+      throw err;
+    }
+
+    const summary = {
+      added: merged.added,
+      replaced: merged.replaced,
+      renamed: merged.renamed,
+      note: bundle.note ?? null,
+    };
+    if (dryRun) return { ok: true, dryRun: true, ...summary };
+
+    try {
+      writeChannelsFile(config.channelsFile, merged.channels);
+    } catch (err) {
+      log.error("failed to write imported channels", err);
+      return reply.code(500).send({ error: "could not write channels.json" });
+    }
+    onReload(merged.channels);
+    return { ok: true, ...summary };
   });
 
   // ------------------------------------------------------------------ discovery

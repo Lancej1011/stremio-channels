@@ -258,3 +258,108 @@ describe("channel API", () => {
     ctx.db.close();
   });
 });
+
+describe("sharing channel guides", () => {
+  it("exports a guide the import side accepts", async () => {
+    const ctx = makeApp("share-roundtrip", [channel("scifi"), channel("sitcoms")]);
+
+    const all = await ctx.app.inject({ method: "GET", url: "/api/channels/export" });
+    assert.equal(all.statusCode, 200);
+    assert.equal(all.json().kind, "headend.channels");
+    assert.deepEqual(all.json().channels.map((c: { id: string }) => c.id), ["scifi", "sitcoms"]);
+
+    const one = await ctx.app.inject({ method: "GET", url: "/api/channels/export?ids=sitcoms" });
+    assert.deepEqual(one.json().channels.map((c: { id: string }) => c.id), ["sitcoms"]);
+
+    const missing = await ctx.app.inject({ method: "GET", url: "/api/channels/export?ids=nope" });
+    assert.equal(missing.statusCode, 404);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("imports new channels and refuses to clobber existing ones", async () => {
+    const ctx = makeApp("share-import", [channel("scifi")]);
+    const guide = {
+      kind: "headend.channels",
+      version: 1,
+      channels: [channel("cooking"), channel("scifi", "tt5000002")],
+    };
+
+    // `add` is all-or-nothing: the colliding id means nothing is written.
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+    const conflict = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import", payload: { bundle: guide, mode: "add" },
+    });
+    assert.equal(conflict.statusCode, 409);
+    assert.deepEqual(conflict.json().conflicts, ["scifi"]);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+
+    const renamed = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import", payload: { bundle: guide, mode: "rename" },
+    });
+    assert.equal(renamed.statusCode, 200);
+    assert.deepEqual(renamed.json().added, ["cooking"]);
+    assert.deepEqual(renamed.json().renamed, [{ from: "scifi", to: "scifi-2" }]);
+    assert.deepEqual(ctx.service.list().map((c) => c.id), ["scifi", "cooking", "scifi-2"]);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("previews without writing when asked", async () => {
+    const ctx = makeApp("share-dryrun", [channel("scifi")]);
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/channels/import",
+      payload: {
+        bundle: { kind: "headend.channels", version: 1, channels: [channel("cooking")] },
+        dryRun: true,
+      },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().dryRun, true);
+    assert.deepEqual(res.json().added, ["cooking"]);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+    assert.equal(ctx.service.list().length, 1);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("rejects malformed guides without touching the lineup", async () => {
+    const ctx = makeApp("share-bad", [channel("scifi")]);
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+
+    const cases: Record<string, unknown>[] = [
+      { bundle: { hello: "world" } },
+      { bundle: { kind: "headend.channels", version: 1, channels: [] } },
+      { bundle: { kind: "headend.channels", version: 1, channels: [{ id: "Bad Id!", name: "x" }] } },
+      // Two channels sharing an id would silently lose one on write.
+      {
+        bundle: {
+          kind: "headend.channels", version: 1,
+          channels: [channel("dupe"), channel("dupe")],
+        },
+      },
+      // Exactly one input, never both and never neither.
+      {},
+      { bundle: { kind: "headend.channels", version: 1, channels: [channel("x")] }, url: "https://example.com/g.json" },
+      { url: "file:///etc/passwd" },
+    ];
+    for (const payload of cases) {
+      const res = await ctx.app.inject({ method: "POST", url: "/api/channels/import", payload });
+      assert.equal(res.statusCode, 400, JSON.stringify(payload).slice(0, 60));
+    }
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+});

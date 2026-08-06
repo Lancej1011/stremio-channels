@@ -300,6 +300,45 @@ For anything not covered by a preset, the channel editor annotates search result
 network and years a show ran (via TVmaze), which makes assembling an era-accurate lineup
 practical.
 
+## Sharing channel guides
+
+A guide is programming only: which titles air, in what order, under which daypart grid. It
+carries no credentials, because nothing in a channel definition has any — the debrid
+account, API keys and access token all live in `config.json`, and a channel's `source` holds
+filter criteria rather than secrets. Every channel is re-validated against the schema on the
+way out, so a field added there later cannot ride along unnoticed.
+
+Whoever imports a guide supplies their own debrid account. Whether a channel actually plays
+for them depends on what their provider has cached, so an import is never verified: the
+scheduler already skips titles it cannot resolve.
+
+**Export** from the Channels view. The whole lineup downloads as a JSON file and is copied
+to the clipboard where the browser allows it. Or take a subset directly:
+
+```bash
+curl -s localhost:7654/api/channels/export?ids=scifi,sitcoms > guide.json
+```
+
+**Import** from the same view, either by pasting the guide or by linking to one someone
+published — a raw gist URL, not a web page. **Preview** shows exactly what would change
+without writing anything. Three collision modes decide what happens when an id already
+exists:
+
+| Mode | Behaviour |
+| --- | --- |
+| `rename` | Keep both; the imported channel arrives as `scifi-2` |
+| `add` | Refuse the whole import and name the conflicts. The default |
+| `replace` | Overwrite yours in place, keeping list position |
+
+`add` is all-or-nothing: one collision means nothing is written, so a guide can never
+half-apply.
+
+Both endpoints are part of the editor surface, so they answer only on loopback and to hosts
+named in `trustedHosts` — never through a tunnel, with or without an access token. A LAN
+device already listed in `trustedHosts` can therefore import from its browser, which is how
+you would do it from a phone at home. The desktop app reaches the same editor from its
+toolbar; the Android client is a viewer and has no import of its own.
+
 ## Watching from other devices
 
 Stremio only accepts an addon URL over plain HTTP when it is on `127.0.0.1`; other devices
