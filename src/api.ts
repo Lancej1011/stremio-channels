@@ -2,7 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ChannelService } from "./channels.ts";
 import { writeChannelsFile } from "./channels-file.ts";
-import { channelSchema, loadChannels, sourceSchema, type ChannelDef, type Config } from "./config.ts";
+import {
+  baseUrl,
+  channelSchema,
+  loadChannels,
+  sourceSchema,
+  type ChannelDef,
+  type Config,
+} from "./config.ts";
+import { urlPrefix } from "./access.ts";
 import { fetchSource, MissingCredentialError, requiredSetting } from "./content/sources/index.ts";
 import {
   fetchTmdbSimilar,
@@ -373,8 +381,57 @@ export function registerApi(
     };
   });
 
+  /**
+   * Read-only guide contract for the standalone viewer. This is deliberately separate
+   * from /api: the rest of that namespace edits channels or exposes operational detail
+   * and remains local-only. Never add resolved URLs or configuration to this response.
+   */
+  app.get<{ Querystring: { hours?: string } }>("/viewer/guide.json", async (req) => {
+    const hours = Math.min(12, Math.max(1, Number(req.query.hours) || 6));
+    const serverTime = Date.now();
+    const until = serverTime + hours * 3600_000;
+
+    const channels = await Promise.all(service.list().map(async (channel) => {
+      const view = await service.view(channel.id);
+      return {
+        id: channel.id,
+        name: channel.name,
+        ...(view?.poster ? { poster: view.poster } : {}),
+        ...(view?.background ? { background: view.background } : {}),
+        ...(channel.description ? { description: channel.description } : {}),
+        programs: getGuide(db, channel.id, serverTime, 200)
+          .filter((entry) => entry.program.start_ms < until)
+          .map((entry) => ({
+            title: entry.program.title,
+            start: entry.program.start_ms,
+            duration: entry.program.duration_ms,
+            daypart: entry.program.daypart,
+            isNow: entry.isNow,
+          })),
+      };
+    }));
+
+    return { serverTime, until, channels };
+  });
+
+  app.get<{ Params: { channelId: string } }>("/viewer/tune/:channelId", async (req, reply) => {
+    const channelId = decodeURIComponent(req.params.channelId);
+    if (!service.get(channelId)) return reply.code(404).send({ error: "no such channel" });
+
+    const instruction = await service.directTune(channelId);
+    if (!instruction) {
+      return reply.code(503).header("Retry-After", "2").send({ error: "channel is not ready" });
+    }
+    reply.header("Cache-Control", "no-store").header("Referrer-Policy", "no-referrer");
+    return instruction;
+  });
+
   app.get("/api/status", async () => ({
     cooldownSeconds: cooldownRemainingSeconds(),
+    // Carries the access token in full. Safe only because /api is unreachable from
+    // anywhere but this machine and the hosts named in trustedHosts.
+    installUrl: `${baseUrl(config)}${urlPrefix(config)}/manifest.json`,
+    viewerUrl: `${baseUrl(config)}${urlPrefix(config)}/watch`,
     debridCalls: apiCallStats(),
     channels: service.list().map((c) => {
       const provisioning = service.provisioning(c.id);

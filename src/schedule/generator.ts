@@ -4,6 +4,7 @@ import { Cinemeta } from "../content/cinemeta.ts";
 import { probeCached } from "../content/probe.ts";
 import type {
   PreparatoryResolver,
+  FailoverResolver,
   PreparedStream,
   RefreshableResolver,
   StreamResolver,
@@ -120,6 +121,10 @@ function isRefreshable(resolver: StreamResolver): resolver is RefreshableResolve
 
 function isPreparatory(resolver: StreamResolver): resolver is PreparatoryResolver {
   return typeof (resolver as PreparatoryResolver).prepare === "function";
+}
+
+function isFailover(resolver: StreamResolver): resolver is FailoverResolver {
+  return typeof (resolver as FailoverResolver).invalidate === "function";
 }
 
 /** Collapses a content list to one entry per title, preserving weights. */
@@ -638,6 +643,17 @@ export class ScheduleGenerator {
       stream.fileId ?? null,
     );
     return stream.url;
+  }
+
+  /**
+   * Playback found that this direct link cannot deliver media. Expire it immediately
+   * so the next tune-in attempt asks the resolver for a new URL instead of serving the
+   * same cached, bad link until its normal TTL elapses.
+   */
+  invalidateUrl(program: ProgramRow): void {
+    const ref = this.poolRefFor(program.ref_key);
+    if (ref && isFailover(this.resolver)) this.resolver.invalidate(ref, program.resolved_url ?? undefined);
+    this.db.clearResolved(program.id);
   }
 
   /**

@@ -249,6 +249,31 @@ function optionalUrl() {
   );
 }
 
+/**
+ * The access token becomes a URL path segment, so it is restricted to the base64url
+ * alphabet: every character is unreserved, which removes any question of whether what
+ * Stremio sends over the wire matches what was configured.
+ *
+ * A malformed token is a startup error rather than a silently ignored setting. Falling
+ * back to "no token" on a typo would leave a server the operator believes is protected
+ * answering to anyone.
+ */
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+
+function optionalToken() {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z
+      .string()
+      .regex(
+        TOKEN_PATTERN,
+        "accessToken must be 16-128 characters of A-Z a-z 0-9 _ - " +
+          '(generate one with: node -e "console.log(require(\'node:crypto\').randomBytes(24).toString(\'base64url\'))")',
+      )
+      .optional(),
+  );
+}
+
 const configSchema = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.coerce.number().int().positive().default(7654),
@@ -259,6 +284,35 @@ const configSchema = z.object({
   publicBaseUrl: optionalUrl(),
   dataDir: z.string().default("./data"),
   channelsFile: z.string().default("./channels.json"),
+
+  /**
+   * Secret required to reach this server from anywhere but the machine it runs on. It is
+   * carried as the first path segment — `/<accessToken>/manifest.json` — because Stremio
+   * derives the catalog, meta and stream URLs from the manifest URL and discards its query
+   * string, so a `?key=` would survive exactly one request.
+   *
+   * Setting it also closes the admin surface: `/api`, `/debug` and `/ui` answer only to a
+   * local or explicitly trusted host, token or no token. Leaving it unset preserves the
+   * original behaviour, where everything is open to anyone who can reach the port.
+   */
+  accessToken: optionalToken(),
+  /**
+   * Hosts that may reach the admin surface besides the loopback address, as they appear in
+   * the Host header (`192.168.1.58:7654`, `100.101.102.103:7654`). Needed because a LAN or
+   * tailnet address is indistinguishable from a hostile one until you say otherwise.
+   */
+  trustedHosts: z.preprocess(
+    // Accepts a comma-separated string so a container, which has no config.json to mount,
+    // can still set it.
+    (value) =>
+      typeof value === "string"
+        ? value
+            .split(",")
+            .map((host) => host.trim())
+            .filter(Boolean)
+        : value,
+    z.array(z.string()).default([]),
+  ),
 
   /**
    * A Stremio stream addon already configured with your debrid key
@@ -402,6 +456,8 @@ function fromEnv(): Record<string, unknown> {
     host: e.HOST,
     port: e.PORT,
     publicBaseUrl: e.PUBLIC_BASE_URL,
+    accessToken: e.ACCESS_TOKEN,
+    trustedHosts: e.TRUSTED_HOSTS,
     dataDir: e.DATA_DIR,
     channelsFile: e.CHANNELS_FILE,
     streamAddonUrl: e.STREAM_ADDON_URL,

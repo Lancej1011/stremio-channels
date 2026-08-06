@@ -26,6 +26,27 @@ export function catalogItemName(channelName: string, nowTitle?: string): string 
   return `${channelName} • ${showName || title}`;
 }
 
+/**
+ * Every type the same channel list is published under.
+ *
+ * "tv" is the honest one: it is what makes Stremio present these as live channels rather
+ * than as a seekable file with a beginning and an end, and it is what the desktop and
+ * Android TV clients render.
+ *
+ * "movie" exists only because the mobile clients do not surface a `tv` catalog anywhere in
+ * their Board or Discover, so on a phone the addon installs and then appears to do
+ * nothing. Publishing the identical channels a second time under a type the mobile grid
+ * does render is the available workaround. "movie" rather than "series" because a series
+ * meta needs a `videos` list to offer playback, while a movie is a single playable item —
+ * which is exactly what a channel is.
+ */
+export const CATALOG_TYPES = ["tv", "movie"] as const;
+export type CatalogType = (typeof CATALOG_TYPES)[number];
+
+export function isCatalogType(value: string): value is CatalogType {
+  return (CATALOG_TYPES as readonly string[]).includes(value);
+}
+
 export function buildManifest(channels: ChannelDef[], version: string) {
   return {
     id: "community.stremio.channels",
@@ -34,18 +55,14 @@ export function buildManifest(channels: ChannelDef[], version: string) {
     description:
       "Cable-style linear TV channels. Each channel runs on a clock, so tuning in " +
       "drops you into whatever is already playing.",
-    // "tv" is what makes Stremio present these as live channels rather than as a
-    // seekable file with a beginning and an end.
-    types: ["tv"],
+    types: [...CATALOG_TYPES],
     resources: ["catalog", "meta", "stream"],
     idPrefixes: [ID_PREFIX],
-    catalogs: [
-      {
-        type: "tv",
-        id: "channels",
-        name: "Channels",
-      },
-    ],
+    catalogs: CATALOG_TYPES.map((type) => ({
+      type,
+      id: "channels",
+      name: "Channels",
+    })),
     behaviorHints: {
       configurable: false,
       configurationRequired: false,

@@ -84,14 +84,15 @@ describe("chooseFile for movies", () => {
     assert.equal(chooseFile(files, candidate(), movie)?.id, 1);
   });
 
-  it("prefers the index the indexer pointed at", () => {
+  it("ignores the indexer's fileIdx entirely", () => {
+    // fileIdx indexes the torrent's own file list, while TorBox's `id` is an account-side
+    // identifier it remaps after createtorrent. Treating the two as the same number bound
+    // features to featurettes that happened to share an index, so the resolver no longer
+    // consults it at all and size decides.
     const files = [file(0, "Movie.Theatrical.mkv", 5e9), file(1, "Movie.Extended.mkv", 9e9)];
-    assert.equal(chooseFile(files, candidate(0), movie)?.id, 0);
-  });
-
-  it("falls back to size when that index is not present", () => {
-    const files = [file(0, "Movie.mkv", 5e9), file(1, "Movie.Extended.mkv", 9e9)];
+    assert.equal(chooseFile(files, candidate(0), movie)?.id, 1);
     assert.equal(chooseFile(files, candidate(42), movie)?.id, 1);
+    assert.equal(chooseFile(files, candidate(), movie)?.id, 1);
   });
 
   it("returns null when a torrent has no video at all", () => {

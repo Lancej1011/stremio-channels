@@ -1,4 +1,4 @@
-import type { Config, ContentRef } from "../config.ts";
+import { refKey, type Config, type ContentRef } from "../config.ts";
 import { logger } from "../log.ts";
 
 const log = logger("resolver");
@@ -44,6 +44,11 @@ export interface StreamResolver {
   resolve(ref: ContentRef): Promise<ResolvedStream | null>;
 }
 
+/** A resolver that can reject a failed release and select a different one next time. */
+export interface FailoverResolver extends StreamResolver {
+  invalidate(ref: ContentRef, failedUrl?: string): void;
+}
+
 interface StremioStream {
   url?: string;
   infoHash?: string;
@@ -59,9 +64,10 @@ interface StremioStream {
  * HTTPS links, which are seekable — exactly what the encoder needs to join a program
  * partway through. Using them means Phase 1 needs no debrid API code of its own.
  */
-export class AddonResolver implements StreamResolver {
+export class AddonResolver implements FailoverResolver {
   readonly name = "stream-addon";
   private readonly base: string;
+  private readonly rejectedUrls = new Map<string, Set<string>>();
 
   constructor(
     addonUrl: string,
@@ -94,7 +100,10 @@ export class AddonResolver implements StreamResolver {
 
     // infoHash-only results are raw torrents with no HTTP endpoint behind them. They
     // cannot be seeked into, so they are useless for a linear feed.
-    const playable = streams.filter((s) => s.url && /^https?:\/\//i.test(s.url));
+    const rejected = this.rejectedUrls.get(refKey(ref));
+    const playable = streams.filter((s) =>
+      s.url && /^https?:\/\//i.test(s.url) && !rejected?.has(s.url),
+    );
     if (playable.length === 0) {
       log.warn(
         `no direct links for ${id} (${streams.length} results, all torrent-only) - is your addon configured with a debrid key?`,
@@ -109,6 +118,16 @@ export class AddonResolver implements StreamResolver {
       expiresAt: Date.now() + 90 * 60 * 1000,
       label: (best.name ?? best.title ?? "stream").replace(/\s+/g, " ").slice(0, 80),
     };
+  }
+
+  invalidate(ref: ContentRef, failedUrl?: string): void {
+    // The URL itself is enough to identify an addon result. On the next discovery pass,
+    // choose the next best stream rather than asking the same CDN link to work again.
+    if (!failedUrl) return;
+    const key = refKey(ref);
+    const rejected = this.rejectedUrls.get(key) ?? new Set<string>();
+    rejected.add(failedUrl);
+    this.rejectedUrls.set(key, rejected);
   }
 
   private pickByQuality(streams: StremioStream[]): StremioStream {

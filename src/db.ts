@@ -134,6 +134,10 @@ export function openDb(dataDir: string) {
       `UPDATE programs SET resolved_url = ?, url_expires_at = ?, torrent_id = COALESCE(?, torrent_id),
               file_id = COALESCE(?, file_id) WHERE id = ?`,
     ),
+    clearResolved: db.prepare(
+      `UPDATE programs SET resolved_url = NULL, url_expires_at = NULL, torrent_id = NULL, file_id = NULL
+       WHERE id = ?`,
+    ),
     insertAiring: db.prepare(
       `INSERT INTO airings (channel_id, ref_key, aired_at) VALUES (?, ?, ?)`,
     ),
@@ -231,6 +235,11 @@ export function openDb(dataDir: string) {
       fileId: number | null = null,
     ): void {
       stmts.setResolved.run(url, expiresAt, torrentId, fileId, programId);
+    },
+
+    /** Discards a failed release binding so the resolver must select another one. */
+    clearResolved(programId: number): void {
+      stmts.clearResolved.run(programId);
     },
 
     recordAiring(channelId: string, refKey: string, atMs: number): void {

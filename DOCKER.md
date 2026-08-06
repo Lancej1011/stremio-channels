@@ -18,7 +18,9 @@ docker compose up -d
 
 Set either `TORBOX_API_KEY` or `STREAM_ADDON_URL` when your editor opens. Configuration lives in
 `./config`, schedules and caches live in `./data`, and both survive image upgrades.
-The default port binding is loopback-only because the editor has no built-in auth.
+The default port binding is loopback-only, and stays that way whatever else you configure:
+the editor is never meant to be published, and a tunnel daemon runs on the host, not in
+the container.
 
 Upgrade without touching those volumes:
 
@@ -30,7 +32,7 @@ docker compose up -d
 To build the checked-out source instead, run `docker compose build --pull` followed by
 `docker compose up -d`.
 
-## Private HTTPS for another device
+## HTTPS for another device
 
 Stremio requires HTTPS for addon URLs that are not on `127.0.0.1`. Keep the container on
 loopback and use Tailscale Serve inside your private tailnet:
@@ -41,8 +43,16 @@ tailscale serve status
 ```
 
 Set `PUBLIC_BASE_URL` in `.env` to the reported `https://...ts.net` origin, recreate the
-container, and install `<that-origin>/manifest.json` in Stremio. Do not publish port 7654
-or use Tailscale Funnel; v0.1's admin surface is intentionally LAN/VPN-only.
+container, and open `<that-origin>/watch` in Headend or install
+`<that-origin>/manifest.json` in Stremio. Never publish port 7654 directly.
+
+For a device that cannot join the tailnet, add an `ACCESS_TOKEN` to `.env` and use
+`tailscale funnel --bg 7654` instead. The install URL then carries the token as its first
+path segment; use `<that-origin>/<token>/watch` for Headend. The editor remains unreachable
+through the tunnel. A container has no
+`config.json` mounted, so set `TRUSTED_HOSTS` by environment as well if you administer it
+from anywhere but the host itself. See the README's
+[Watching from other devices](README.md#watching-from-other-devices) for the full setup.
 
 ## Manual runs and hardware acceleration
 

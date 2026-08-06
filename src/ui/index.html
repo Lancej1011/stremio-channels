@@ -74,7 +74,8 @@
     animation: onair 2.4s ease-in-out infinite;
   }
   .wordmark-name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
-  .wordmark-url { font-family: var(--mono); font-size: 11px; color: var(--dim-2); overflow-wrap: anywhere; }
+  .wordmark-url { font-family: var(--mono); font-size: 11px; color: var(--dim-2); overflow-wrap: anywhere; cursor: pointer; }
+  .wordmark-url:hover { color: var(--text-2); }
 
   .nav { display: flex; flex-direction: column; gap: 2px; }
   .nav-item {
@@ -572,7 +573,8 @@
         <span class="eyebrow" style="letter-spacing:.16em;font-size:11px">Headend</span>
       </div>
       <div class="wordmark-name">Stremio Channels</div>
-      <div class="wordmark-url" id="rail-url"></div>
+      <div class="wordmark-url" id="rail-url" title="The addon URL to install in Stremio. Click to copy."></div>
+      <div class="wordmark-url" id="rail-viewer-url" title="The private Headend viewer URL. Click to copy."></div>
     </div>
 
     <nav class="nav" id="nav" aria-label="Views"></nav>
@@ -1214,8 +1216,29 @@ function setDataSource(live, message) {
   $("#rail-source-note").textContent = live
     ? "Reading this server's own API. Nothing here is sample data."
     : message || "The admin API did not respond.";
-  $("#rail-url").textContent = location.origin;
+  // installUrl carries the access token when one is configured, and is the only place
+  // outside the startup log that shows it. Falls back to the origin before the first
+  // status poll lands, or when the API is unreachable.
+  $("#rail-url").textContent = state.status?.installUrl || location.origin;
+  $("#rail-viewer-url").textContent = state.status?.viewerUrl
+    ? `Watch: ${state.status.viewerUrl}`
+    : "";
 }
+
+async function copyRailUrl(selector, label) {
+  const url = $(selector).textContent.replace(/^Watch:\s*/, "");
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast(`${label} URL copied`);
+  } catch {
+    // Clipboard access needs a secure context, which http://192.168.x is not.
+    toast("Could not copy — select the URL manually", true);
+  }
+}
+
+$("#rail-url").addEventListener("click", () => copyRailUrl("#rail-url", "Addon"));
+$("#rail-viewer-url").addEventListener("click", () => copyRailUrl("#rail-viewer-url", "Viewer"));
 
 // ------------------------------------------------------------------ derived
 

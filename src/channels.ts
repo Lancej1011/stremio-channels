@@ -6,6 +6,7 @@ import {
   type Config,
   type ContentRef,
 } from "./config.ts";
+import { urlPrefix } from "./access.ts";
 import { Cinemeta } from "./content/cinemeta.ts";
 import { AddonResolver, type StreamResolver } from "./content/resolver.ts";
 import { TorBoxResolver } from "./content/providers/torbox-resolver.ts";
@@ -31,6 +32,8 @@ const BOUNDARY_EPSILON_MS = 10_000;
 const LINK_KEEPER_INTERVAL_MS = 10 * 60_000;
 /** Refresh a link this far before it expires, rather than waiting for it to lapse. */
 const LINK_REFRESH_MARGIN_MS = 25 * 60_000;
+/** A bad link gets a fresh URL first; only persistent failures remove its program. */
+const MAX_SOURCE_FAILURES = 3;
 
 export interface ChannelView {
   id: string;
@@ -39,6 +42,25 @@ export interface ChannelView {
   background?: string;
   description: string;
   nowTitle?: string;
+}
+
+export interface DirectTuneView {
+  serverTime: number;
+  channel: { id: string; name: string };
+  playback: {
+    mode: "direct" | "hls";
+    hlsPath: string;
+    reason?: "unsupported-codecs" | "source-unavailable";
+    directUrl?: string;
+    videoCodec: string | null;
+    audioCodec: string | null;
+    title: string;
+    start: number;
+    duration: number;
+    offsetMs: number;
+    endsAt: number;
+  };
+  next: { title: string; start: number; duration: number } | null;
 }
 
 /**
@@ -56,6 +78,8 @@ export class ChannelService {
    * genuine demand rather than mere interest from the admin UI or the catalog.
    */
   private readonly lastWatched = new Map<string, number>();
+  /** Failures reported by independent viewer sessions for one scheduled program. */
+  private readonly sourceFailures = new Map<string, number>();
 
   constructor(
     private channels: ChannelDef[],
@@ -269,6 +293,34 @@ export class ChannelService {
     return true;
   }
 
+  /**
+   * Refresh a source after its first failures, then take a persistently broken program
+   * out of the timeline. The start time is part of the key so a late report from an old
+   * playback session can never skip whatever replaced it.
+   */
+  private reportSourceFailure(channelId: string, program: { id: number; start_ms: number; ref_key: string; title: string }): void {
+    const now = getNowPlaying(this.db, channelId);
+    if (!now || now.program.id !== program.id || now.program.start_ms !== program.start_ms) return;
+
+    this.generators.get(channelId)?.invalidateUrl(now.program);
+    const key = `${channelId}:${program.start_ms}:${program.ref_key}`;
+    const failures = (this.sourceFailures.get(key) ?? 0) + 1;
+    this.sourceFailures.set(key, failures);
+
+    if (failures < MAX_SOURCE_FAILURES) {
+      log.warn(
+        `${channelId}: source for "${program.title}" failed (${failures}/${MAX_SOURCE_FAILURES}); refreshing link`,
+      );
+      return;
+    }
+
+    this.sourceFailures.delete(key);
+    this.db.dropFrom(channelId, program.start_ms);
+    this.feeds.stopChannel(channelId, `source failed repeatedly: ${program.title}`);
+    void this.generators.get(channelId)?.ensureHorizon();
+    log.warn(`${channelId}: skipped "${program.title}" after ${failures} failed source attempts`);
+  }
+
   get(id: string): ChannelDef | undefined {
     return this.channels.find((c) => c.id === id);
   }
@@ -433,7 +485,55 @@ export class ChannelService {
   }
 
   streamUrl(channelId: string): string {
-    return `${baseUrl(this.config)}/ch/${channelId}/live.m3u8`;
+    // Prefixed even for local playback. The prefixed route is served locally too, so
+    // there is no branch here and no way for a token-less URL to reach a player.
+    return `${baseUrl(this.config)}${urlPrefix(this.config)}/ch/${channelId}/live.m3u8`;
+  }
+
+  /**
+   * A native client's tune instruction. The phone receives only the current signed URL,
+   * never resolver credentials or durable debrid ids, and falls back to our HLS feed
+   * when the measured codecs are not broadly direct-playable.
+   */
+  async directTune(channelId: string, at = Date.now()): Promise<DirectTuneView | null> {
+    const channel = this.get(channelId);
+    const generator = this.generators.get(channelId);
+    if (!channel || !generator) return null;
+
+    await generator.ensureCoverage(at);
+    const now = getNowPlaying(this.db, channelId, at);
+    if (!now) return null;
+
+    this.lastWatched.set(channelId, at);
+    const directUrl = await generator.freshUrl(now.program);
+    const probe = this.db.getProbe(now.program.ref_key);
+    const direct = Boolean(directUrl && directPlayable(probe?.video_codec, probe?.audio_codec));
+    const guide = getGuide(this.db, channelId, at, 3);
+    const next = guide.find((entry) => entry.program.start_ms > at)?.program;
+
+    void this.prewarmNext(channelId, now.program.start_ms + now.program.duration_ms);
+
+    return {
+      serverTime: at,
+      channel: { id: channel.id, name: channel.name },
+      playback: {
+        mode: direct ? "direct" : "hls",
+        hlsPath: `ch/${encodeURIComponent(channelId)}/live.m3u8`,
+        ...(!direct
+          ? { reason: directUrl ? "unsupported-codecs" as const : "source-unavailable" as const }
+          : { directUrl: directUrl! }),
+        videoCodec: probe?.video_codec ?? null,
+        audioCodec: probe?.audio_codec ?? null,
+        title: now.program.title,
+        start: now.program.start_ms,
+        duration: now.program.duration_ms,
+        offsetMs: now.offsetMs,
+        endsAt: now.program.start_ms + now.program.duration_ms,
+      },
+      next: next
+        ? { title: next.title, start: next.start_ms, duration: next.duration_ms }
+        : null,
+    };
   }
 
   /**
@@ -503,6 +603,7 @@ export class ChannelService {
       }
       return {
         title: now.program.title,
+        onSourceFailure: () => this.reportSourceFailure(channelId, now.program),
         source: {
           url,
           offsetSeconds: Math.max(0, now.offsetMs / 1000),
@@ -564,6 +665,13 @@ export class ChannelService {
       nowTitle: current?.program.title,
     };
   }
+}
+
+/** Server-side first pass; the Android client applies its own device decoder check too. */
+function directPlayable(videoCodec: string | null | undefined, audioCodec: string | null | undefined): boolean {
+  const video = new Set(["h264", "hevc", "vp8", "vp9", "av1"]);
+  const audio = new Set(["aac", "mp3", "ac3", "eac3", "opus", "vorbis", "flac"]);
+  return Boolean(videoCodec && video.has(videoCodec) && (!audioCodec || audio.has(audioCodec)));
 }
 
 /**

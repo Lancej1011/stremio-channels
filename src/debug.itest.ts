@@ -120,6 +120,25 @@ describe("debug endpoint", { timeout: 180_000 }, () => {
         (body.stream as Record<string, string>).url,
         "http://192.168.1.50:7654/ch/one/live.m3u8",
       );
+      assert.equal(body.accessTokenConfigured, false);
+    } finally {
+      service.feeds.stopAll("test complete");
+      db.close();
+    }
+  });
+
+  it("masks the access token in output meant to be pasted into a bug report", async () => {
+    const token = "itest_token_0123456789abcdef";
+    const { db, app, service } = build(join(root, "tokened"), {
+      accessToken: token,
+      publicBaseUrl: "https://box.tailnet.ts.net",
+    });
+    try {
+      const { body } = await get(app, "/debug/hls/one");
+      assert.equal(body.accessTokenConfigured, true);
+      const url = String((body.stream as Record<string, string>).url);
+      assert.equal(url, "https://box.tailnet.ts.net/<token>/ch/one/live.m3u8");
+      assert.ok(!JSON.stringify(body).includes(token), "token leaked into the debug payload");
     } finally {
       service.feeds.stopAll("test complete");
       db.close();

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,7 @@ const dir = mkdtempSync(join(tmpdir(), "chan-config-test-"));
 const OWNED_ENV = [
   "VIDEO_PROFILE", "VIDEO_LEVEL",
   "HLS_MASTER_PLAYLIST", "HLS_PROGRAM_DATE_TIME", "HLS_CODECS", "HLS_PLAYLIST_WAIT_SECONDS",
+  "ACCESS_TOKEN", "TRUSTED_HOSTS",
 ] as const;
 
 afterEach(() => {
@@ -44,12 +46,46 @@ describe("config defaults", () => {
       mdblistApiKey: "",
       traktClientId: "",
       stremioAuthKey: "",
+      accessToken: "",
     });
+    assert.equal(config.accessToken, undefined);
     assert.equal(config.publicBaseUrl, undefined);
     assert.equal(config.streamAddonUrl, undefined);
     assert.equal(config.torboxApiKey, undefined);
     assert.equal(config.tmdbReadAccessToken, undefined);
     assert.equal(config.tmdbApiKey, undefined);
+  });
+});
+
+describe("access token", () => {
+  it("refuses to start on a token that would not survive a URL", () => {
+    // Silently ignoring a malformed token would leave a server its operator believes is
+    // protected answering to anyone, so this has to be fatal rather than a warning.
+    for (const bad of ["short", "has spaces", "has/slash", "träma", "a".repeat(129)]) {
+      assert.throws(() => load({ accessToken: bad }), /accessToken/, bad);
+    }
+  });
+
+  it("accepts a generated base64url secret", () => {
+    const token = randomBytes(24).toString("base64url");
+    assert.equal(load({ accessToken: token }).accessToken, token);
+  });
+
+  it("lets the environment override the file, as every other setting does", () => {
+    process.env.ACCESS_TOKEN = "env_token_0123456789abcdef";
+    assert.equal(load({ accessToken: "file_token_0123456789abcdef" }).accessToken,
+      "env_token_0123456789abcdef");
+  });
+
+  it("splits TRUSTED_HOSTS so a container can set it without a config file", () => {
+    process.env.TRUSTED_HOSTS = "192.168.1.58:7654, 100.64.0.1:7654";
+    assert.deepEqual(load({}).trustedHosts, ["192.168.1.58:7654", "100.64.0.1:7654"]);
+  });
+
+  it("defaults to no token and no trusted hosts", () => {
+    const config = load({});
+    assert.equal(config.accessToken, undefined);
+    assert.deepEqual(config.trustedHosts, []);
   });
 });
 

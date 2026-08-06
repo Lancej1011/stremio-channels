@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090b0f">
+  <title>Headend</title>
+  <link rel="manifest" href="./watch/manifest.webmanifest">
+  <link rel="icon" href="./watch/icon.svg">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#090b0f; --panel:#101318; --panel-2:#151922; --line:#292f39;
+      --text:#f1f3f7; --dim:#929aa9; --faint:#5f6878; --amber:#f5b544;
+      --green:#4fd18b; --red:#f2604a; --label:190px; --ppm:4px;
+      font-family:Archivo,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    }
+    * { box-sizing:border-box }
+    html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text) }
+    button { color:inherit; font:inherit }
+    button:focus-visible { outline:3px solid var(--amber); outline-offset:2px }
+    .app { position:relative; width:100%; height:100%; background:#000 }
+    video { position:relative; z-index:1; width:100%; height:100%; display:block; object-fit:contain; background:#000 }
+    .backdrop { position:absolute; inset:0; z-index:0; background:center/cover no-repeat; opacity:.14 }
+    .shade { position:absolute; z-index:2; inset:0; pointer-events:none; background:linear-gradient(180deg,rgba(0,0,0,.56),transparent 30%,transparent 55%,rgba(0,0,0,.72)) }
+    .topbar { position:absolute; z-index:4; top:0; left:0; right:0; display:flex; align-items:center; gap:14px; padding:max(18px,env(safe-area-inset-top)) 24px 18px; background:linear-gradient(#000b,transparent) }
+    .brand { display:flex; align-items:center; gap:10px; letter-spacing:.14em; text-transform:uppercase; font:600 12px/1 "IBM Plex Mono",monospace }
+    .live-square { width:10px; height:10px; border-radius:2px; background:var(--green); box-shadow:0 0 16px #4fd18b88; animation:pulse 2.4s ease-in-out infinite }
+    @keyframes pulse { 50% { opacity:.35 } }
+    .clock { margin-left:auto; font:500 13px/1 "IBM Plex Mono",monospace; font-variant-numeric:tabular-nums }
+    .info { position:absolute; z-index:4; left:24px; bottom:28px; max-width:min(700px,calc(100% - 48px)); text-shadow:0 2px 8px #000 }
+    .channel { color:var(--green); text-transform:uppercase; letter-spacing:.12em; font:600 11px/1.2 "IBM Plex Mono",monospace }
+    .title { margin:8px 0 5px; font-size:clamp(24px,4vw,48px); line-height:1.08; font-weight:600 }
+    .next { color:#d1d5dd; font-size:14px }
+    .progress { width:min(520px,72vw); height:4px; margin-top:14px; overflow:hidden; border-radius:2px; background:#ffffff30 }
+    .progress > span { display:block; height:100%; background:var(--green); width:0 }
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:16px }
+    .btn { min-height:44px; padding:0 15px; border:1px solid #ffffff30; border-radius:7px; background:#11151ddd; cursor:pointer }
+    .btn:hover { border-color:var(--amber); color:var(--amber) }
+    .btn--primary { border-color:#f5b54499; background:#f5b54424 }
+    .status { position:absolute; z-index:8; inset:0; display:grid; place-items:center; pointer-events:none }
+    .status-card { max-width:440px; margin:24px; padding:22px 24px; border:1px solid var(--line); border-radius:10px; background:#101318ee; text-align:center; pointer-events:auto }
+    .status-card h2 { margin:0 0 8px; font-size:19px }
+    .status-card p { margin:0 0 16px; color:var(--dim); line-height:1.45 }
+    .spinner { width:28px; height:28px; margin:0 auto 14px; border:3px solid #ffffff22; border-top-color:var(--amber); border-radius:50%; animation:spin .8s linear infinite }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    .guide { position:absolute; z-index:10; left:0; right:0; bottom:0; height:min(64vh,650px); display:flex; flex-direction:column; background:#0b0d12f5; border-top:1px solid var(--line); transform:translateY(105%); transition:transform .2s ease }
+    .guide.open { transform:translateY(0) }
+    .guide-head { display:flex; align-items:center; gap:14px; min-height:67px; padding:10px 20px; border-bottom:1px solid var(--line) }
+    .guide-head h1 { margin:0; font-size:18px }
+    .guide-head small { display:block; margin-top:3px; color:var(--dim) }
+    .ranges { display:flex; gap:6px; margin-left:auto }
+    .range { min-width:48px; min-height:40px; border:1px solid var(--line); border-radius:999px; background:transparent; cursor:pointer; font:500 12px "IBM Plex Mono",monospace }
+    .range[aria-pressed="true"] { color:var(--amber); border-color:#f5b54499; background:#f5b54416 }
+    .close { width:44px; height:44px; border:1px solid var(--line); border-radius:7px; background:var(--panel-2); cursor:pointer; font-size:20px }
+    .guide-scroll { flex:1; overflow:auto; overscroll-behavior:contain }
+    .guide-grid { position:relative; min-width:100% }
+    .ruler-row,.guide-row { display:grid; grid-template-columns:var(--label) auto; min-width:max-content }
+    .ruler-row { position:sticky; top:0; z-index:5; height:34px; background:#0b0d12 }
+    .rail-head,.row-label { position:sticky; left:0; z-index:4; width:var(--label); background:#0d1015; border-right:1px solid var(--line) }
+    .rail-head { padding:11px 14px; color:var(--dim); letter-spacing:.14em; font:600 10px/1 "IBM Plex Mono",monospace }
+    .ruler { position:relative; height:34px }
+    .tick { position:absolute; top:0; bottom:0; padding:10px 0 0 7px; border-left:1px solid var(--line); color:var(--dim); font:500 10px/1 "IBM Plex Mono",monospace; white-space:nowrap }
+    .guide-row { height:68px; border-top:1px solid #1c212a }
+    .row-label { height:68px; padding:11px 13px; border:0; border-right:1px solid var(--line); text-align:left; cursor:pointer }
+    .row-label:hover { background:#171b23 }
+    .row-label strong { display:block; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px }
+    .row-label span { display:block; margin-top:5px; color:var(--faint); font:500 10px "IBM Plex Mono",monospace }
+    .track { position:relative; height:68px; background:#0f1217 }
+    .program { position:absolute; top:5px; height:58px; min-width:40px; overflow:hidden; padding:8px 9px; border:1px solid #2a303b; border-radius:5px; background:var(--panel-2); text-align:left; cursor:pointer }
+    .program:hover { border-color:#596274 }
+    .program.now { border-color:var(--green); background:#4fd18b18 }
+    .program strong,.program span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .program strong { font-size:12px; font-weight:600 }
+    .program span { margin-top:5px; color:var(--dim); font:500 10px "IBM Plex Mono",monospace }
+    .program.now span { color:var(--green) }
+    .now-line { position:absolute; z-index:3; top:0; bottom:0; width:2px; background:var(--amber); pointer-events:none }
+    .empty-track { padding:24px 12px; color:var(--faint); font-size:12px }
+    .toast { position:absolute; z-index:20; top:76px; left:50%; transform:translate(-50%,-16px); opacity:0; padding:10px 14px; border:1px solid var(--line); border-radius:7px; background:#11151df2; color:var(--text); transition:.2s; pointer-events:none }
+    .toast.show { opacity:1; transform:translate(-50%,0) }
+    [hidden] { display:none!important }
+    @media (max-width:700px) {
+      :root { --label:145px; --ppm:3px }
+      .topbar { padding-left:15px; padding-right:15px }
+      .info { left:15px; bottom:18px; max-width:calc(100% - 30px) }
+      .guide { height:72vh }
+      .guide-head { padding:9px 12px }
+      .guide-head small { display:none }
+      .ranges .range:first-child { display:none }
+      .title { font-size:25px }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <div class="backdrop" id="backdrop"></div>
+    <video id="video" playsinline></video>
+    <div class="shade"></div>
+    <header class="topbar">
+      <div class="brand"><span class="live-square"></span>Headend</div>
+      <div class="clock" id="clock">--:--:--</div>
+    </header>
+    <section class="info" id="info" hidden>
+      <div class="channel" id="channel-name"></div>
+      <div class="title" id="program-title"></div>
+      <div class="next" id="next-title"></div>
+      <div class="progress"><span id="program-progress"></span></div>
+      <div class="actions">
+        <button class="btn" id="previous-channel" aria-label="Previous channel">− CH</button>
+        <button class="btn btn--primary" id="guide-button">Guide</button>
+        <button class="btn" id="next-channel" aria-label="Next channel">CH +</button>
+        <button class="btn" id="play-button">Pause</button>
+        <button class="btn" id="fullscreen-button">Fullscreen</button>
+      </div>
+    </section>
+    <div class="status" id="status">
+      <div class="status-card">
+        <div class="spinner" id="spinner" hidden></div>
+        <h2 id="status-title">Loading Headend</h2>
+        <p id="status-detail">Fetching the channel guide…</p>
+        <button class="btn btn--primary" id="status-action" hidden>Try again</button>
+      </div>
+    </div>
+    <section class="guide" id="guide" aria-label="Program guide" aria-hidden="true">
+      <header class="guide-head">
+        <div><h1>Program Guide</h1><small>Enter tunes the selected channel live</small></div>
+        <div class="ranges" id="ranges"></div>
+        <button class="close" id="close-guide" aria-label="Close guide">×</button>
+      </header>
+      <div class="guide-scroll" id="guide-scroll"><div class="guide-grid" id="guide-grid"></div></div>
+    </section>
+    <div class="toast" id="toast"></div>
+  </main>
+  <script>
+  (() => {
+    "use strict";
+    const $ = (s) => document.querySelector(s);
+    const prefix = location.pathname.endsWith("/watch")
+      ? location.pathname.slice(0, -"/watch".length)
+      : "";
+    const state = { guide:null, hours:6, channelId:null, hls:null, retry:null, retryIndex:0,
+      mediaRecovered:false, focused:null, guideOpen:false };
+    const RETRIES = [2000, 4000, 8000, 15000];
+    const LAST_CHANNEL = "headend.lastChannel";
+    let toastTimer;
+
+    function path(value) { return `${prefix}${value}`; }
+    function fmtTime(ms, seconds=false) {
+      return new Intl.DateTimeFormat([], { hour:"numeric", minute:"2-digit", ...(seconds ? {second:"2-digit"} : {}) }).format(ms);
+    }
+    function esc(value) { return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]); }
+    function setStatus(title, detail, action, loading=false) {
+      $("#status-title").textContent = title;
+      $("#status-detail").textContent = detail;
+      $("#spinner").hidden = !loading;
+      const button = $("#status-action");
+      button.hidden = !action;
+      button.textContent = action?.label || "Try again";
+      button.onclick = action?.run || null;
+      $("#status").hidden = false;
+    }
+    function hideStatus() { $("#status").hidden = true; }
+    function toast(message) {
+      const node = $("#toast"); node.textContent = message; node.classList.add("show");
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove("show"), 2600);
+    }
+
+    async function fetchGuide(background=false) {
+      try {
+        const response = await fetch(path(`/viewer/guide.json?hours=${state.hours}`), { cache:"no-store" });
+        if (!response.ok) throw new Error(`guide returned ${response.status}`);
+        state.guide = await response.json();
+        renderGuide(); updateProgramInfo();
+        if (!background && !state.guide.channels.length) {
+          setStatus("No channels configured", "Create a channel from the local Headend admin interface.", null);
+          openGuide();
+        }
+        return true;
+      } catch (error) {
+        if (!background) setStatus("Guide unavailable", "Headend could not load the program guide.",
+          { label:"Try again", run:() => start() });
+        return false;
+      }
+    }
+
+    function guideStart() {
+      const value = new Date(state.guide?.serverTime || Date.now());
+      value.setSeconds(0,0); value.setMinutes(value.getMinutes() < 30 ? 0 : 30);
+      return value.getTime() - 30 * 60000;
+    }
+    function currentProgram(channel, at=Date.now()) {
+      return channel?.programs.find(p => p.start <= at && p.start + p.duration > at);
+    }
+    function nextProgram(channel, at=Date.now()) {
+      return channel?.programs.find(p => p.start > at);
+    }
+    function channel() { return state.guide?.channels.find(c => c.id === state.channelId); }
+
+    function renderRanges() {
+      $("#ranges").innerHTML = [3,6,12].map(hours =>
+        `<button class="range" data-hours="${hours}" aria-pressed="${hours === state.hours}">${hours}h</button>`).join("");
+      $("#ranges").querySelectorAll("button").forEach(button => button.onclick = async () => {
+        state.hours = Number(button.dataset.hours); renderRanges(); await fetchGuide();
+      });
+    }
+    function renderGuide() {
+      renderRanges();
+      if (!state.guide) return;
+      const start = guideStart();
+      const span = state.hours * 60 + 30;
+      const ppm = innerWidth <= 700 ? 3 : 4;
+      const trackWidth = span * ppm;
+      let ruler = "";
+      for (let minute=0; minute<=span; minute+=30) {
+        ruler += `<span class="tick" style="left:${minute*ppm}px">${esc(fmtTime(start + minute*60000))}</span>`;
+      }
+      let html = `<div class="ruler-row"><div class="rail-head">CHANNEL</div><div class="ruler" style="width:${trackWidth}px">${ruler}</div></div>`;
+      for (const ch of state.guide.channels) {
+        const now = currentProgram(ch);
+        let cells = "";
+        ch.programs.forEach((program,index) => {
+          let left = (program.start-start)/60000*ppm;
+          let width = Math.max(40, program.duration/60000*ppm-2);
+          if (left < 0) { width += left; left=0; }
+          if (width < 12 || left > trackWidth) return;
+          const sub = `${fmtTime(program.start)} · ${Math.round(program.duration/60000)}m${program.daypart ? ` · ${program.daypart}` : ""}`;
+          cells += `<button class="program${program.isNow ? " now" : ""}" data-channel="${esc(ch.id)}" data-index="${index}" style="left:${left}px;width:${width}px" title="${esc(program.title)} — ${esc(sub)}"><strong>${esc(program.title)}</strong><span>${esc(sub)}</span></button>`;
+        });
+        if (!cells) cells = `<div class="empty-track">Nothing scheduled yet</div>`;
+        const nowLeft = (Date.now()-start)/60000*ppm;
+        html += `<div class="guide-row"><button class="row-label" data-channel="${esc(ch.id)}"><strong>${esc(ch.name)}</strong><span>${esc(now?.title || "OFF AIR")}</span></button><div class="track" style="width:${trackWidth}px">${cells}<i class="now-line" style="left:${nowLeft}px"></i></div></div>`;
+      }
+      $("#guide-grid").innerHTML = html;
+      $("#guide-grid").querySelectorAll("[data-channel]").forEach(node => node.onclick = () => tune(node.dataset.channel, true));
+      state.focused = $("#guide-grid").querySelector(`.program[data-channel="${CSS.escape(state.channelId || "")}"].now`)
+        || $("#guide-grid .program") || $("#guide-grid .row-label");
+    }
+
+    function openGuide() {
+      state.guideOpen = true; $("#guide").classList.add("open"); $("#guide").setAttribute("aria-hidden","false");
+      requestAnimationFrame(() => {
+        state.focused ||= $("#guide-grid .program") || $("#close-guide");
+        state.focused?.focus(); state.focused?.scrollIntoView({block:"nearest",inline:"center"});
+      });
+    }
+    function closeGuide() {
+      state.guideOpen=false; $("#guide").classList.remove("open"); $("#guide").setAttribute("aria-hidden","true");
+      $("#guide-button").focus();
+    }
+    function moveFocus(key) {
+      const active = document.activeElement;
+      if (!active?.matches(".program,.row-label")) return;
+      const rows = [...document.querySelectorAll(".guide-row")];
+      const row = active.closest(".guide-row"); const rowIndex = rows.indexOf(row);
+      const cells = [...row.querySelectorAll(".program")]; const cellIndex = cells.indexOf(active);
+      let target;
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        target = cells[cellIndex + (key === "ArrowRight" ? 1 : -1)] || row.querySelector(".row-label");
+      } else {
+        const nextRow = rows[rowIndex + (key === "ArrowDown" ? 1 : -1)];
+        if (nextRow) target = cellIndex < 0 ? nextRow.querySelector(".row-label") :
+          [...nextRow.querySelectorAll(".program")][Math.max(0,cellIndex)] || nextRow.querySelector(".row-label");
+      }
+      if (target) { state.focused=target; target.focus(); target.scrollIntoView({block:"nearest",inline:"center"}); }
+    }
+
+    function loadHlsLibrary() {
+      if (window.Hls || document.querySelector("script[data-hls]")) return Promise.resolve();
+      return new Promise((resolve,reject) => {
+        const script=document.createElement("script"); script.dataset.hls=""; script.src=path("/watch/hls.js");
+        script.onload=resolve; script.onerror=reject; document.head.append(script);
+      });
+    }
+    function destroyPlayback() {
+      clearTimeout(state.retry); state.retry=null;
+      if (state.hls) { state.hls.destroy(); state.hls=null; }
+      const video=$("#video"); video.pause(); video.removeAttribute("src"); video.load();
+    }
+    function scheduleRetry(reason) {
+      clearTimeout(state.retry);
+      const delay=RETRIES[Math.min(state.retryIndex++,RETRIES.length-1)];
+      setStatus("Reconnecting", `${reason} Retrying in ${Math.round(delay/1000)} seconds…`, null, true);
+      state.retry=setTimeout(() => beginPlayback(false),delay);
+    }
+    async function beginPlayback(userInitiated) {
+      if (!state.channelId) return;
+      destroyPlayback(); state.mediaRecovered=false;
+      setStatus("Starting channel", "Encoders run in real time; the first picture can take a few seconds.", null, true);
+      const video=$("#video"); const src=path(`/ch/${encodeURIComponent(state.channelId)}/live.m3u8`);
+      try {
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src=src;
+          video.addEventListener("playing", onPlaying, {once:true});
+          video.addEventListener("error", () => scheduleRetry("The native player lost the stream."), {once:true});
+          await video.play();
+        } else {
+          await loadHlsLibrary();
+          if (!window.Hls?.isSupported()) throw new Error("This browser cannot play HLS video.");
+          const hls=state.hls=new Hls({liveSyncDurationCount:3, maxLiveSyncPlaybackRate:1.25});
+          hls.loadSource(src); hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(showPlayPrompt));
+          hls.on(Hls.Events.ERROR, (_event,data) => {
+            if (!data.fatal) return;
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !state.mediaRecovered) {
+              state.mediaRecovered=true; hls.recoverMediaError(); return;
+            }
+            scheduleRetry(data.type === Hls.ErrorTypes.NETWORK_ERROR ? "The stream is temporarily unavailable." : "Playback stopped.");
+          });
+          video.addEventListener("playing", onPlaying, {once:true});
+        }
+      } catch (error) {
+        if (error?.name === "NotAllowedError" || !userInitiated) showPlayPrompt();
+        else setStatus("Playback unavailable", error?.message || "This browser could not start the channel.",
+          {label:"Try again",run:() => beginPlayback(true)});
+      }
+    }
+    function onPlaying() { state.retryIndex=0; hideStatus(); $("#play-button").textContent="Pause"; }
+    function showPlayPrompt() {
+      setStatus("Ready to watch", "Your browser requires a button press before starting video with sound.",
+        {label:"Play channel",run:() => $("#video").play().then(onPlaying).catch(() => beginPlayback(true))});
+    }
+    function tune(id,userInitiated=false) {
+      if (!state.guide?.channels.some(ch => ch.id===id)) return;
+      state.channelId=id; localStorage.setItem(LAST_CHANNEL,id); closeGuide(); updateProgramInfo();
+      beginPlayback(userInitiated);
+    }
+    function surf(direction) {
+      const channels=state.guide?.channels || []; if (!channels.length) return;
+      const at=Math.max(0,channels.findIndex(ch => ch.id===state.channelId));
+      tune(channels[(at+direction+channels.length)%channels.length].id,true);
+    }
+    function updateProgramInfo() {
+      const ch=channel();
+      if (!ch) { $("#info").hidden=true; return; }
+      const now=currentProgram(ch), next=nextProgram(ch);
+      $("#info").hidden=false; $("#channel-name").textContent=ch.name;
+      $("#program-title").textContent=now?.title || "Off air";
+      $("#next-title").textContent=next ? `Next ${fmtTime(next.start)} · ${next.title}` : "No upcoming program information";
+      const elapsed=now ? Math.max(0,Date.now()-now.start) : 0;
+      $("#program-progress").style.width=now ? `${Math.min(100,elapsed/now.duration*100)}%` : "0";
+      $("#backdrop").style.backgroundImage=ch.background ? `url("${String(ch.background).replace(/["\\]/g,"\\$&")}")` : "none";
+    }
+
+    async function start() {
+      setStatus("Loading Headend", "Fetching the channel guide…", null, true);
+      if (!await fetchGuide()) return;
+      const saved=localStorage.getItem(LAST_CHANNEL);
+      const first=state.guide.channels.find(ch => ch.id===saved) || state.guide.channels[0];
+      if (first) { state.channelId=first.id; updateProgramInfo(); beginPlayback(false); }
+    }
+
+    $("#guide-button").onclick=openGuide; $("#close-guide").onclick=closeGuide;
+    $("#previous-channel").onclick=() => surf(-1);
+    $("#next-channel").onclick=() => surf(1);
+    $("#play-button").onclick=() => {
+      const video=$("#video"); if (video.paused) video.play().then(onPlaying).catch(showPlayPrompt);
+      else { video.pause(); $("#play-button").textContent="Play"; }
+    };
+    $("#fullscreen-button").onclick=() => document.fullscreenElement ? document.exitFullscreen() : $("#app").requestFullscreen?.();
+    document.addEventListener("keydown", event => {
+      if (["ChannelUp","PageUp"].includes(event.key)) { event.preventDefault(); surf(1); return; }
+      if (["ChannelDown","PageDown"].includes(event.key)) { event.preventDefault(); surf(-1); return; }
+      if (!state.guideOpen && event.key === "ArrowUp") { event.preventDefault(); openGuide(); return; }
+      if (state.guideOpen && ["Escape","BrowserBack","Backspace"].includes(event.key)) { event.preventDefault(); closeGuide(); return; }
+      if (state.guideOpen && ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(event.key)) { event.preventDefault(); moveFocus(event.key); }
+    });
+    window.addEventListener("online", () => { fetchGuide(true); if (state.channelId) beginPlayback(false); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) fetchGuide(true); });
+    window.addEventListener("resize", () => renderGuide());
+    setInterval(() => { $("#clock").textContent=fmtTime(Date.now(),true); updateProgramInfo(); },1000);
+    setInterval(() => fetchGuide(true),30000);
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+      navigator.serviceWorker.register(path("/watch/sw.js"), {scope:path("/watch")}).catch(() => {});
+    }
+    start();
+  })();
+  </script>
+</body>
+</html>

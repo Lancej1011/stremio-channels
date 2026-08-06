@@ -12,15 +12,17 @@ import { warmCapabilities, type PlaybackSession } from "./feed/supervisor.ts";
 import { masterPlaylist } from "./feed/playlist.ts";
 import { resolveCodecs } from "./debug.ts";
 import { baseUrl, loadChannels, loadConfig, type ChannelDef } from "./config.ts";
+import { createAccessControl, urlPrefix } from "./access.ts";
 import { openDb } from "./db.ts";
 import {
   buildManifest,
   catalogItemName,
   channelIdFromStremioId,
+  isCatalogType,
   stremioId,
 } from "./addon/manifest.ts";
 import { cooldownRemainingSeconds } from "./content/providers/torbox.ts";
-import { logger } from "./log.ts";
+import { logger, setRedaction } from "./log.ts";
 
 const VERSION = "0.1.1";
 const log = logger("server");
@@ -30,7 +32,31 @@ let channels = loadChannels(config.channelsFile);
 const db = openDb(config.dataDir);
 const service = new ChannelService(channels, db, config);
 
-const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
+const access = createAccessControl(config);
+// `rewriteUrl` runs before routing, so the token prefix is gone by the time any route,
+// hook or playlist-relative URL below sees the request.
+const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, rewriteUrl: access.rewriteUrl });
+
+/**
+ * Opt-in request log, for working out what a remote client is really asking for when it
+ * reports a failure the server has no other record of. Registered *before* the guard so
+ * refused requests are logged too — they are the interesting ones — and after
+ * `rewriteUrl`, so a URL that still carries a token prefix is one whose token did not
+ * match. Off unless LOG_REQUESTS=1.
+ */
+if (process.env.LOG_REQUESTS === "1") {
+  const reqLog = logger("request");
+  app.addHook("onRequest", async (req) => {
+    reqLog.info(`${req.method} ${req.url}`, {
+      host: req.headers.host,
+      ua: req.headers["user-agent"],
+      from: req.headers["x-forwarded-for"] ?? req.socket.remoteAddress,
+    });
+  });
+}
+
+// First hook registered, so nothing else runs for a request that will be refused.
+app.addHook("onRequest", access.guard);
 
 /**
  * Applies an edited channel set. The manifest is rebuilt from `channels` on every
@@ -42,9 +68,12 @@ function applyChannels(next: ChannelDef[]): void {
   for (const id of changed) void service.warmUpChannel(id);
 }
 
-// Stremio's web client calls addons from a different origin, so every response needs
-// permissive CORS or nothing loads at all.
-app.addHook("onSend", async (_req, reply) => {
+// Stremio's web client calls addons from a different origin, so the addon and feed
+// responses need permissive CORS or nothing loads at all. The editor API is deliberately
+// left out: a wildcard origin there would let any page the operator happens to be
+// browsing POST to the server on localhost and rewrite their channel list.
+app.addHook("onSend", async (req, reply) => {
+  if (!access.corsAllowed(req.url)) return;
   reply.header("Access-Control-Allow-Origin", "*");
   reply.header("Access-Control-Allow-Headers", "*");
   reply.header("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -61,13 +90,16 @@ app.get("/manifest.json", async (_req, reply) => {
   return buildManifest(channels, VERSION);
 });
 
-app.get("/catalog/tv/channels.json", async (_req, reply) => {
+app.get<{ Params: { type: string } }>("/catalog/:type/channels.json", async (req, reply) => {
+  const { type } = req.params;
+  if (!isCatalogType(type)) return reply.code(404).send({ err: "no such catalog" });
+
   const metas = await Promise.all(
     service.list().map(async (channel) => {
       const view = await service.view(channel.id);
       return {
         id: stremioId(channel.id),
-        type: "tv",
+        type,
         name: catalogItemName(channel.name, view?.nowTitle),
         poster: view?.poster,
         posterShape: "square",
@@ -82,7 +114,9 @@ app.get("/catalog/tv/channels.json", async (_req, reply) => {
   return { metas };
 });
 
-app.get<{ Params: { id: string } }>("/meta/tv/:id", async (req, reply) => {
+app.get<{ Params: { type: string; id: string } }>("/meta/:type/:id", async (req, reply) => {
+  const { type } = req.params;
+  if (!isCatalogType(type)) return reply.code(404).send({ err: "not found" });
   const channelId = channelIdFromStremioId(decodeURIComponent(req.params.id).replace(/\.json$/, ""));
   if (!channelId) return reply.code(404).send({ err: "not found" });
 
@@ -93,7 +127,7 @@ app.get<{ Params: { id: string } }>("/meta/tv/:id", async (req, reply) => {
   return {
     meta: {
       id: stremioId(channelId),
-      type: "tv",
+      type,
       name: view.name,
       poster: view.poster,
       posterShape: "square",
@@ -105,7 +139,8 @@ app.get<{ Params: { id: string } }>("/meta/tv/:id", async (req, reply) => {
   };
 });
 
-app.get<{ Params: { id: string } }>("/stream/tv/:id", async (req, reply) => {
+app.get<{ Params: { type: string; id: string } }>("/stream/:type/:id", async (req, reply) => {
+  if (!isCatalogType(req.params.type)) return reply.code(404).send({ err: "no such channel" });
   const channelId = channelIdFromStremioId(decodeURIComponent(req.params.id).replace(/\.json$/, ""));
   if (!channelId || !service.get(channelId)) {
     return reply.code(404).send({ err: "no such channel" });
@@ -297,6 +332,58 @@ app.get("/ui/hls.js", async (_req, reply) => {
   return createReadStream(found);
 });
 
+// ---------------------------------------------------------------- standalone viewer
+
+const viewerDir = join(dirname(fileURLToPath(import.meta.url)), "viewer");
+
+app.get("/watch", async (_req, reply) => {
+  reply
+    .header("Content-Type", "text/html; charset=utf-8")
+    .header("Cache-Control", "no-store");
+  return createReadStream(join(viewerDir, "index.html"));
+});
+
+app.get("/watch/hls.js", async (_req, reply) => {
+  const candidates = [
+    join(process.cwd(), "node_modules/hls.js/dist/hls.min.js"),
+    join(viewerDir, "..", "..", "node_modules/hls.js/dist/hls.min.js"),
+  ];
+  const found = candidates.find((p) => existsSync(p));
+  if (!found) return reply.code(404).send("hls.js not installed");
+  reply.header("Content-Type", "text/javascript").header("Cache-Control", "max-age=86400");
+  return createReadStream(found);
+});
+
+app.get("/watch/sw.js", async (_req, reply) => {
+  reply
+    .header("Content-Type", "text/javascript; charset=utf-8")
+    .header("Cache-Control", "no-cache")
+    .header("Service-Worker-Allowed", `${urlPrefix(config)}/watch`);
+  return createReadStream(join(viewerDir, "sw.js"));
+});
+
+app.get("/watch/icon.svg", async (_req, reply) => {
+  reply.header("Content-Type", "image/svg+xml").header("Cache-Control", "max-age=86400");
+  return createReadStream(join(viewerDir, "icon.svg"));
+});
+
+app.get("/watch/manifest.webmanifest", async (_req, reply) => {
+  const prefix = urlPrefix(config);
+  reply.header("Content-Type", "application/manifest+json").header("Cache-Control", "no-store");
+  return {
+    name: "Headend",
+    short_name: "Headend",
+    description: "Private, clock-synced live channels",
+    start_url: `${prefix}/watch`,
+    scope: `${prefix}/watch`,
+    display: "standalone",
+    orientation: "landscape",
+    background_color: "#090b0f",
+    theme_color: "#090b0f",
+    icons: [{ src: `${prefix}/watch/icon.svg`, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }],
+  };
+});
+
 // ---------------------------------------------------------------- diagnostics
 
 app.get("/health", async () => {
@@ -343,6 +430,33 @@ async function waitForPlaylist(path: string, timeoutMs: number): Promise<boolean
   return existsSync(path);
 }
 
+/**
+ * Says out loud what the current settings mean for who can reach this server. Both cases
+ * are warnings rather than refusals: an unauthenticated server on a trusted LAN is a
+ * legitimate setup, and so is a token'd one being configured before its tunnel exists.
+ */
+function warnAboutExposure(): void {
+  const loopback = (value: string) => /^(127\.|localhost$|::1$|\[::1\])/i.test(value);
+
+  if (!config.accessToken) {
+    if (!loopback(config.host) || (config.publicBaseUrl && !loopback(baseUrl(config)))) {
+      log.warn(
+        "no accessToken is set and this server is reachable beyond loopback — the channel " +
+          "editor and diagnostics are open to anyone who can reach the port. Do not expose it " +
+          "to the internet.",
+      );
+    }
+    return;
+  }
+
+  if (!config.publicBaseUrl || loopback(baseUrl(config))) {
+    log.warn(
+      "accessToken is set but publicBaseUrl is loopback or unset, so the install URL above " +
+        "only works on this machine. Set publicBaseUrl to the address other devices reach.",
+    );
+  }
+}
+
 function shutdown(signal: string) {
   log.info(`${signal} received, shutting down`);
   service.feeds.stopAll("server shutdown");
@@ -358,8 +472,14 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 try {
   await app.listen({ host: config.host, port: config.port });
   log.info(`listening on ${baseUrl(config)}`);
-  log.info(`install this addon in Stremio:  ${baseUrl(config)}/manifest.json`);
+  // The one place the token is printed in full, because there is no other way to learn
+  // the install URL. Redaction is armed immediately afterwards, and nothing that runs
+  // before this point has the token to leak.
+  log.info(`standalone Headend viewer:      ${baseUrl(config)}${urlPrefix(config)}/watch`);
+  log.info(`install this addon in Stremio:  ${baseUrl(config)}${urlPrefix(config)}/manifest.json`);
+  if (config.accessToken) setRedaction(config.accessToken);
   log.info(`channels: ${channels.map((c) => c.id).join(", ")}`);
+  warnAboutExposure();
 
   // Probe ffmpeg up front so the first viewer does not pay for a test encode, then build
   // the timelines in the background so the first tune-in is not also the first time we

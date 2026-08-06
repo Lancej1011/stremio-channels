@@ -31,8 +31,10 @@
   ],
   "scripts": {
     "build": "tsc && npm run copy-assets",
-    "copy-assets": "node -e \"require('fs').cpSync('src/ui','dist/ui',{recursive:true})\"",
+    "copy-assets": "node -e \"const fs=require('fs'); fs.cpSync('src/ui','dist/ui',{recursive:true}); fs.cpSync('src/viewer','dist/viewer',{recursive:true})\"",
     "dev": "tsx watch src/server.ts",
+    "desktop": "python3 desktop/headend.py",
+    "desktop:install": "python3 desktop/headend.py --install",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",

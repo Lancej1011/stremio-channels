@@ -11,6 +11,9 @@ services:
       PORT: 7654
       DATA_DIR: /data
       CHANNELS_FILE: /config/channels.json
+    # Loopback-only, and it should stay that way. The channel editor is never published,
+    # and a tunnel that makes the addon reachable from outside runs on the host and
+    # connects here — so there is no case where this needs a wider binding.
     ports:
       - "127.0.0.1:7654:7654"
     volumes:

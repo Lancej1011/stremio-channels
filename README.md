@@ -12,10 +12,13 @@ This is not a playlist that starts from the beginning. It is a real, continuousl
 running video feed with a schedule behind it.
 
 > [!IMPORTANT]
-> This is self-hosted software, not a hosted streaming service. The host must stay on,
-> every installation needs its owner's debrid credentials, and v0.1 must remain on
-> localhost, a trusted LAN, or a private VPN. The editor and write APIs do not have
-> built-in authentication; never forward port 7654 to the public internet.
+> This is self-hosted software, not a hosted streaming service. The host must stay on and
+> every installation needs its owner's debrid credentials. Out of the box there is no
+> authentication at all, so an unconfigured server belongs on localhost, a trusted LAN, or
+> a private VPN — never on a forwarded port 7654. To reach it from outside, set an
+> `accessToken` and put it behind an outbound tunnel; see
+> [Watching from other devices](#watching-from-other-devices). The channel editor stays
+> local-only either way.
 
 ```
 ▶ Now: Firefly - S01E05 - Out of Gas
@@ -134,6 +137,65 @@ repository lives elsewhere.
 Then install `http://127.0.0.1:7654/manifest.json` in Stremio: Addons → Add addon →
 paste the URL. Your channels appear under the **Channels** catalog as TV items.
 
+Stremio is optional. Open **http://127.0.0.1:7654/watch** for the standalone Headend
+viewer: a full-screen live player with a TV-friendly program guide. It remembers the last
+channel in that browser and supports arrow keys, Enter, Back/Escape, Page Up/Down and
+fullscreen. Browsers that block autoplay show a Play button instead of failing silently.
+
+## The Headend viewer
+
+Headend is the read-only viewing surface; `/ui` remains the local administration surface.
+Open the guide with Arrow Up or the Guide button, move through channels and programs with
+the arrow keys, and press Enter to tune that channel live. Selecting a future program does
+not provide catch-up or DVR playback.
+
+Safari uses native HLS. Other modern browsers load the bundled HLS.js player, so the
+viewer has no CDN dependency. Installable-app metadata is available over HTTPS, but guide
+responses, private pages, playlists and video segments are never stored in an offline
+cache.
+
+### Linux desktop application
+
+Linux can run Headend as a regular desktop application with its own GTK window, launcher,
+native header controls and fullscreen mode. It uses the system WebKitGTK media engine—not
+Electron—and starts the `stremio-channels.service` user service automatically when needed.
+
+This installation needs the GTK 3 and WebKitGTK 4.1 Python bindings. They are already
+present on the supported development system; on Debian/Ubuntu their package names are
+normally `python3-gi`, `gir1.2-gtk-3.0` and `gir1.2-webkit2-4.1`.
+
+```bash
+npm run desktop:install
+```
+
+Open **Headend** from the Linux application menu, or run `headend`. For an unusual server
+address, launch `headend --url https://server.example/<token>/watch` or set
+`HEADEND_URL`. The default is the local `http://127.0.0.1:7654/watch` service.
+
+Desktop shortcuts: F11 toggles fullscreen, Escape leaves fullscreen, Ctrl+G opens the
+guide, and Ctrl+R reloads the viewer. The native header also provides previous/next
+channel, guide, reload and fullscreen buttons.
+
+### Native Android application
+
+The [`android/`](android/) project is a native Media3 viewer for Android 8.0 and newer.
+It has its own guide and requests a short-lived tune instruction from
+`GET /viewer/tune/:channelId`. Compatible sources play directly at the channel's current
+wall-clock offset; unsupported codecs and direct-play errors fall back automatically to
+the existing HLS channel. The client retunes itself at program boundaries.
+
+Build and install the debug APK:
+
+```bash
+cd android
+export ANDROID_HOME=/path/to/Android/Sdk
+./gradlew testDebugUnitTest assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+On first launch, paste the private Watch URL shown in the Headend admin interface. See
+[`android/README.md`](android/README.md) for LAN and away-from-home URL examples.
+
 ## The web UI
 
 Open **http://127.0.0.1:7654/ui**. Editing `channels.json` by hand stays supported, but
@@ -240,13 +302,15 @@ practical.
 
 ## Watching from other devices
 
-Stremio only accepts an addon URL over plain HTTP when it is on `127.0.0.1`; other
-devices need HTTPS. v0.1 deliberately has no public-internet deployment because its
-editor and operational APIs are unauthenticated. The supported remote path is a private
-Tailscale network.
+Stremio only accepts an addon URL over plain HTTP when it is on `127.0.0.1`; other devices
+need HTTPS. There are two ways to provide it, and the right one depends on whether you can
+install Tailscale on the device that will be watching.
 
-Keep the Compose port bound to loopback, install Tailscale on the server and client, then
-publish the local port privately:
+### Private tailnet — nothing to configure
+
+If the watching device can run Tailscale, this is the simplest option and needs no token.
+Keep the Compose port bound to loopback, install Tailscale on the server and the client,
+then publish the local port privately:
 
 ```bash
 tailscale serve --bg 7654
@@ -264,8 +328,71 @@ PUBLIC_BASE_URL=https://channels.example.ts.net
 docker compose up -d --force-recreate
 ```
 
-Install `https://channels.example.ts.net/manifest.json` in Stremio. Tailscale access
-rules remain the authentication boundary. Do not use Tailscale Funnel for this release.
+Open `https://channels.example.ts.net/watch` for Headend, or install
+`https://channels.example.ts.net/manifest.json` in Stremio. Tailscale's access rules are
+the authentication boundary, and the whole server — editor included — is reachable to
+anything on your tailnet.
+
+### Public tunnel with an access token
+
+For a device that cannot join a tailnet, such as a phone on cellular, set an `accessToken`
+and expose the server through an outbound tunnel. The token becomes the first segment of
+every URL, and without it the server answers `404` to everything.
+
+Generate one, and treat it like a password:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(24).toString('base64url'))"
+```
+
+```dotenv
+ACCESS_TOKEN=<the generated value>
+PUBLIC_BASE_URL=https://channels.example.ts.net
+```
+
+Then publish the port. Funnel is outbound-only, so there is no port to forward and no
+router to reconfigure:
+
+```bash
+tailscale funnel --bg 7654
+```
+
+Open `https://channels.example.ts.net/<token>/watch` for Headend, or install
+`https://channels.example.ts.net/<token>/manifest.json` in Stremio. Both exact URLs are
+shown under the wordmark in the editor, where clicking one copies it.
+
+> [!IMPORTANT]
+> **The channel editor is not reachable through the tunnel**, with or without the token.
+> `/api`, `/debug` and `/ui` answer only to `127.0.0.1` and to hosts you name in
+> `trustedHosts`, because a single secret shared with a media player is the wrong thing
+> guarding a write API. Administer the server at `http://127.0.0.1:7654/ui` on the machine
+> itself.
+
+Two consequences worth knowing before you commit to this:
+
+- Requests that arrive through any reverse proxy — including `tailscale serve` on the same
+  hostname — are treated as remote, because that is what stops an attacker from spoofing a
+  local `Host` header through Funnel. To administer over the tailnet rather than at the
+  console, use the raw tailnet address (`http://100.x.y.z:7654/ui`) and add
+  `100.x.y.z:7654` to `trustedHosts`. Funnel is per-port and does not intercept it.
+- Rotating the token changes both private URLs, so Headend bookmarks must be updated and
+  Stremio has to be reinstalled on every device.
+
+As defence in depth, restrict the tunnel itself to the token path with
+`tailscale funnel --set-path`, so a scan of the bare hostname finds nothing at all.
+
+### Whichever you choose
+
+LAN devices are remote once a token is set. Either install the token'd URL on them, or add
+their view of the server to `trustedHosts`:
+
+```dotenv
+TRUSTED_HOSTS=192.168.1.58:7654
+```
+
+Bandwidth is the constraint people hit first. Each viewer costs a sustained upload of
+whatever `video.bitrate` says — 6 Mbps by default, which is more upstream than many home
+connections have. Drop it to `3000k` at 720p if playback stutters away from home.
 
 Verified on Stremio desktop (flatpak 1.1.4): each catalog card is labeled with the channel
 and current show (for example, `90s Sitcoms • Seinfeld`), while selecting it shows the full
@@ -326,13 +453,16 @@ or both.
 ## Configuration
 
 Everything in `config.json` can also be set by environment variable, which wins over the
-file: `PORT`, `HOST`, `PUBLIC_BASE_URL`, `DATA_DIR`, `CHANNELS_FILE`, `STREAM_ADDON_URL`,
-`TMDB_API_TOKEN`, `TMDB_API_KEY`, `ENCODER`, `LOG_LEVEL`.
+file: `PORT`, `HOST`, `PUBLIC_BASE_URL`, `ACCESS_TOKEN`, `TRUSTED_HOSTS`, `DATA_DIR`,
+`CHANNELS_FILE`, `STREAM_ADDON_URL`, `TMDB_API_TOKEN`, `TMDB_API_KEY`, `ENCODER`,
+`LOG_LEVEL`.
 
 Useful knobs:
 
 | Key | Default | Notes |
 | --- | --- | --- |
+| `accessToken` | — | Secret first path segment required of remote clients. Unset means no authentication at all |
+| `trustedHosts` | `[]` | Host header values besides loopback allowed to reach the editor, as `192.168.1.58:7654` |
 | `video.bitrate` | `6000k` | Output bitrate per channel |
 | `hls.segmentSeconds` | `2` | Encoders run at real time, so this sets how long tuning in takes |
 | `idleShutdownSeconds` | `120` | How long a feed survives with nobody watching |
@@ -358,6 +488,7 @@ rather than fixing playback.
 ## Diagnostics
 
 - `GET /health` — which channels exist and which are currently live
+- `GET /viewer/guide.json?hours=6` — the sanitized read-only guide used by Headend
 - `GET /guide` — plain-text now/next for every channel
 - `GET /api/status` — adds `debridCalls`, a running count of debrid API requests by
   endpoint. Debrid rate limits are the binding constraint on how fast channels fill, so
@@ -370,7 +501,13 @@ rather than fixing playback.
 
 The two fields worth checking first are `publicBaseUrlIsLoopback` (a stream URL pointing at
 127.0.0.1 is unreachable from any other device) and `codecsAgree` (false means the server is
-describing the stream to the player as something it is not).
+describing the stream to the player as something it is not). `accessTokenConfigured` tells
+you whether a device that cannot reach the server is failing on routing or on a missing
+token; the token itself is masked as `<token>` throughout, so this output is safe to paste
+into an issue.
+
+With an `accessToken` set, `/health` and `/guide` need it too (`/<token>/health`), and
+`/api` and `/debug` are local-only — reach them from the machine itself.
 
 ## Tests
 

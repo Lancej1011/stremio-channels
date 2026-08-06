@@ -32,6 +32,12 @@ export type AccessKind = "playlist" | "segment";
 export interface NextProgram {
   title: string;
   source: ProgramSource;
+  /**
+   * Called when ffmpeg cannot sustain this source. The channel service uses this to
+   * refresh a possibly stale debrid URL and, after repeated failures, move past a
+   * file that is genuinely broken rather than retrying it forever.
+   */
+  onSourceFailure?: () => void;
 }
 
 /**
@@ -484,6 +490,7 @@ export class PlaybackSession {
       this.log.warn(
         `encoder for "${next.title}" ${endedEarly ? "ended early" : `exited ${code}`} after ${fmt(elapsed)}`,
       );
+      next.onSourceFailure?.();
       // The encoder may have died immediately (dead URL) or partway through. The cursor is
       // already advanced by what it produced; let the slate cover the rest of the slot.
       if (remaining > MIN_PROGRAM_SECONDS) {
@@ -721,20 +728,13 @@ export class SessionManager {
    * that nobody goes on to play simply idles out.
    */
   async warm(channelId: string): Promise<PlaybackSession> {
-    this.evictIfFull();
-
-    const session = new PlaybackSession(
-      channelId,
-      randomUUID(),
-      this.config,
-      this.providerFor(channelId),
-      this.parentLog,
-    );
-    this.sessions.set(session.sessionId, session);
-    this.startReaper();
-
-    await session.ensureStarted();
-    return session;
+    // Stremio may ask for a stream several times while a detail page opens. Those are
+    // not separate viewers, so they must share one speculative pipeline instead of
+    // consuming an encoder per request. A claimed session is deliberately not reused:
+    // a real second viewer still needs an independent pauseable feed.
+    const waiting = this.forChannel(channelId).find((s) => !s.isClaimed && s.isRunning);
+    if (waiting) return waiting;
+    return this.create(channelId);
   }
 
   /**
@@ -752,8 +752,26 @@ export class SessionManager {
       return warmed;
     }
 
-    const session = await this.warm(channelId);
+    const session = await this.create(channelId);
     session.markClaimed();
+    return session;
+  }
+
+  /** Allocates a new independent playback pipeline. Only `claim` uses this for viewers. */
+  private async create(channelId: string): Promise<PlaybackSession> {
+    this.evictIfFull();
+
+    const session = new PlaybackSession(
+      channelId,
+      randomUUID(),
+      this.config,
+      this.providerFor(channelId),
+      this.parentLog,
+    );
+    this.sessions.set(session.sessionId, session);
+    this.startReaper();
+
+    await session.ensureStarted();
     return session;
   }
 

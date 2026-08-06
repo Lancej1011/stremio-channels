@@ -3,6 +3,10 @@
   "port": 7654,
   "streamAddonUrl": "",
   "_comment_publicBaseUrl": "Set this only if you watch from another device. It must be an address that device can reach, not localhost.",
+  "_comment_accessToken": "Required to reach this server from anywhere but the machine it runs on; it becomes the first path segment of the addon URL. Empty means no authentication at all. Generate one with: node -e \"console.log(require('node:crypto').randomBytes(24).toString('base64url'))\"",
+  "accessToken": "",
+  "_comment_trustedHosts": "Host header values besides loopback allowed to reach the channel editor, such as 192.168.1.58:7654. Only consulted once accessToken is set.",
+  "trustedHosts": [],
   "qualityPreference": [
     "1080p",
     "720p",

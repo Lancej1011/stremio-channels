@@ -36,6 +36,85 @@ function makeApp(name: string, initial: ChannelDef[]) {
 }
 
 describe("channel API", () => {
+  it("publishes a bounded, read-only guide for the standalone viewer", async () => {
+    const configured = channelSchema.parse({
+      ...channel("viewer"),
+      name: "Viewer Channel",
+      poster: "https://images.example/channel.jpg",
+      description: "A private channel",
+    });
+    const ctx = makeApp("viewer-guide", [configured]);
+    const now = Date.now();
+    ctx.db.putCached("cinemeta:movie:tt5000001", {
+      id: "tt5000001",
+      name: "Viewer Movie",
+      runtime: "60 min",
+      poster: "https://images.example/program.jpg",
+      background: "https://images.example/background.jpg",
+    });
+    ctx.db.insertPrograms([{
+      channel_id: "viewer",
+      slot_index: 0,
+      start_ms: now - 60_000,
+      duration_ms: 3_600_000,
+      ref_key: "tt5000001",
+      title: "Viewer Movie",
+      resolved_url: "https://secret.example/debrid-token",
+      url_expires_at: now + 3_600_000,
+      daypart: "Prime time",
+      torrent_id: 123,
+      file_id: 456,
+    }]);
+    ctx.db.putProbe({
+      ref_key: "tt5000001",
+      duration_ms: 3_600_000,
+      video_codec: "h264",
+      audio_codec: "aac",
+      probed_at: now,
+    });
+
+    const response = await ctx.app.inject({ method: "GET", url: "/viewer/guide.json?hours=99" });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    assert.equal(body.until - body.serverTime, 12 * 3_600_000);
+    assert.equal(body.channels[0].id, "viewer");
+    assert.equal(body.channels[0].poster, "https://images.example/channel.jpg");
+    assert.equal(body.channels[0].description, "A private channel");
+    assert.deepEqual(body.channels[0].programs[0], {
+      title: "Viewer Movie",
+      start: now - 60_000,
+      duration: 3_600_000,
+      daypart: "Prime time",
+      isNow: true,
+    });
+    assert.doesNotMatch(response.body, /debrid-token|resolved_url|torrent_id|file_id/);
+
+    const tune = await ctx.app.inject({ method: "GET", url: "/viewer/tune/viewer" });
+    assert.equal(tune.statusCode, 200, tune.body);
+    assert.equal(tune.headers["cache-control"], "no-store");
+    assert.equal(tune.json().playback.mode, "direct");
+    assert.equal(tune.json().playback.directUrl, "https://secret.example/debrid-token");
+    assert.ok(tune.json().playback.offsetMs >= 60_000);
+    assert.equal(tune.json().playback.hlsPath, "ch/viewer/live.m3u8");
+    assert.doesNotMatch(tune.body, /torrent_id|file_id|123|456/);
+
+    ctx.db.putProbe({
+      ref_key: "tt5000001",
+      duration_ms: 3_600_000,
+      video_codec: "mpeg2video",
+      audio_codec: "aac",
+      probed_at: now,
+    });
+    const fallback = await ctx.app.inject({ method: "GET", url: "/viewer/tune/viewer" });
+    assert.equal(fallback.json().playback.mode, "hls");
+    assert.equal(fallback.json().playback.reason, "unsupported-codecs");
+    assert.equal(fallback.json().playback.directUrl, undefined);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
   it("refuses a colliding preset unless replacement is explicit", async () => {
     const ctx = makeApp("preset-conflict", [channel("scifi")]);
     const before = readFileSync(ctx.config.channelsFile, "utf8");
