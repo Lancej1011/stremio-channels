@@ -10,7 +10,7 @@ import {
 import type { FailoverResolver, PreparatoryResolver, PreparedStream, ResolvedStream } from "../resolver.ts";
 import { Cinemeta } from "../cinemeta.ts";
 import { IndexerClient, type Candidate } from "./indexer.ts";
-import { TorBoxClient } from "./torbox.ts";
+import type { TorBoxApi } from "./torbox.ts";
 
 const log = logger("torbox-resolver");
 
@@ -41,7 +41,7 @@ const BINDING_CACHE_MS = 30 * 24 * 60 * 60_000;
 
 export class TorBoxResolver implements PreparatoryResolver, FailoverResolver {
   readonly name = "torbox";
-  private readonly torbox: TorBoxClient;
+  private readonly torbox: TorBoxApi;
   private readonly indexer: IndexerClient;
   private readonly prefs: SelectionPrefs;
   /** Purely db-backed, so this shares the scheduler's cache rather than duplicating it. */
@@ -49,8 +49,8 @@ export class TorBoxResolver implements PreparatoryResolver, FailoverResolver {
   /** Failed hashes are intentionally process-local: a restart gives a transient outage another chance. */
   private readonly rejectedHashes = new Map<string, Set<string>>();
 
-  constructor(apiKey: string, indexerUrl: string, config: Config, private readonly db: Db) {
-    this.torbox = new TorBoxClient(apiKey);
+  constructor(torbox: TorBoxApi, indexerUrl: string, config: Config, private readonly db: Db) {
+    this.torbox = torbox;
     this.indexer = new IndexerClient(indexerUrl);
     this.cinemeta = new Cinemeta(db);
     this.prefs = {

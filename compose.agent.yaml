@@ -1,0 +1,37 @@
+services:
+  channels:
+    environment:
+      DEBRID_AGENT_URL: http://debrid-agent:7665
+      DEBRID_AGENT_TOKEN_FILE: /run/secrets/debrid_agent_token
+    secrets:
+      - debrid_agent_token
+    depends_on:
+      debrid-agent:
+        condition: service_healthy
+
+  debrid-agent:
+    image: ghcr.io/lancej1011/stremio-channels:latest
+    build:
+      context: .
+    restart: unless-stopped
+    command: ["node", "dist/debrid-agent.js"]
+    environment:
+      DEBRID_AGENT_HOST: 0.0.0.0
+      DEBRID_AGENT_PORT: 7665
+      TORBOX_API_KEY_FILE: /run/secrets/torbox_api_key
+      DEBRID_AGENT_TOKEN_FILE: /run/secrets/debrid_agent_token
+    secrets:
+      - torbox_api_key
+      - debrid_agent_token
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(7665,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    # Deliberately no ports: only the Headend container can reach this capability broker.
+
+secrets:
+  torbox_api_key:
+    file: ./secrets/torbox_api_key
+  debrid_agent_token:
+    file: ./secrets/debrid_agent_token

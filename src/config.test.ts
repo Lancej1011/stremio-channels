@@ -11,6 +11,17 @@ const OWNED_ENV = [
   "VIDEO_PROFILE", "VIDEO_LEVEL",
   "HLS_MASTER_PLAYLIST", "HLS_PROGRAM_DATE_TIME", "HLS_CODECS", "HLS_PLAYLIST_WAIT_SECONDS",
   "ACCESS_TOKEN", "TRUSTED_HOSTS",
+  "DEBRID_AGENT_URL", "DEBRID_AGENT_TOKEN", "DEBRID_AGENT_TOKEN_FILE",
+  "TORBOX_API_KEY", "TORBOX_API_KEY_FILE",
+  "REMOTE_DIRECT_PLAY",
+  "PERSIST_RESOLVED_URLS",
+  "ALLOW_UNAUTHENTICATED_NON_LOOPBACK",
+  "ALLOW_PRIVATE_GUIDE_IMPORTS",
+  "ALLOW_IMPORTED_GUIDE_ARTWORK",
+  "ALLOW_IMPORTED_GUIDE_SOURCES",
+  "AUTH_FAILURE_LIMIT", "AUTH_FAILURE_WINDOW_SECONDS", "AUTH_BLOCK_SECONDS",
+  "TUNE_REQUEST_LIMIT_PER_MINUTE",
+  "DEBRID_HOURLY_OPERATION_LIMIT", "DEBRID_DAILY_OPERATION_LIMIT",
 ] as const;
 
 afterEach(() => {
@@ -54,10 +65,43 @@ describe("config defaults", () => {
     assert.equal(config.torboxApiKey, undefined);
     assert.equal(config.tmdbReadAccessToken, undefined);
     assert.equal(config.tmdbApiKey, undefined);
+    assert.equal(config.remoteDirectPlay, false);
+    assert.equal(config.persistResolvedUrls, false);
+    assert.equal(config.allowUnauthenticatedNonLoopback, false);
+    assert.equal(config.allowPrivateGuideImports, false);
+    assert.equal(config.allowImportedGuideArtwork, false);
+    assert.equal(config.allowImportedGuideSources, false);
+    assert.equal(config.authFailureLimit, 20);
+    assert.equal(config.authFailureWindowSeconds, 300);
+    assert.equal(config.authBlockSeconds, 900);
+    assert.equal(config.tuneRequestLimitPerMinute, 30);
+    assert.equal(config.debridHourlyOperationLimit, 120);
+    assert.equal(config.debridDailyOperationLimit, 1000);
+  });
+
+  it("requires both halves of the isolated agent configuration", () => {
+    assert.throws(() => load({ debridAgentUrl: "http://127.0.0.1:7665" }), /configured together/);
+    assert.throws(() => load({ debridAgentToken: "agent_token_0123456789abcdef" }), /configured together/);
+    const config = load({
+      debridAgentUrl: "http://127.0.0.1:7665",
+      debridAgentToken: "agent_token_0123456789abcdef",
+    });
+    assert.equal(config.debridAgentUrl, "http://127.0.0.1:7665");
   });
 });
 
 describe("access token", () => {
+  it("fails closed on an unauthenticated non-loopback bind", () => {
+    assert.throws(() => load({ host: "0.0.0.0" }), /refusing an unauthenticated/);
+    assert.equal(
+      load({ host: "0.0.0.0", allowUnauthenticatedNonLoopback: true }).host,
+      "0.0.0.0",
+    );
+    assert.equal(
+      load({ host: "0.0.0.0", accessToken: "viewer_token_0123456789abcdef" }).host,
+      "0.0.0.0",
+    );
+  });
   it("refuses to start on a token that would not survive a URL", () => {
     // Silently ignoring a malformed token would leave a server its operator believes is
     // protected answering to anyone, so this has to be fatal rather than a warning.
@@ -153,6 +197,19 @@ describe("nested environment overrides", () => {
 });
 
 describe("named channel pools", () => {
+  it("rejects non-HTTPS imported artwork capabilities", () => {
+    const base = {
+      id: "art",
+      name: "Art",
+      content: [{ type: "movie", id: "tt0000001" }],
+    };
+    assert.throws(() => channelSchema.parse({ ...base, poster: "http://tracker.example/pixel" }), /https/);
+    assert.throws(() => channelSchema.parse({ ...base, poster: "file:///etc/passwd" }), /https/);
+    assert.equal(
+      channelSchema.parse({ ...base, poster: "https://images.example/poster.jpg" }).poster,
+      "https://images.example/poster.jpg",
+    );
+  });
   it("accepts combined pools and weekday schedule blocks", () => {
     const channel = channelSchema.parse({
       id: "weekend-cartoons",

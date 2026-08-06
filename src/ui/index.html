@@ -878,7 +878,7 @@
   <div class="dlg-foot">
     <button type="button" class="btn" id="share-cancel">Cancel</button>
     <button type="button" class="btn" id="share-preview">Preview</button>
-    <button type="button" class="btn btn--primary" id="share-apply">Import</button>
+    <button type="button" class="btn btn--primary" id="share-apply" disabled>Import</button>
   </div>
 </dialog>
 
@@ -1290,6 +1290,7 @@ function channelStatus(id) {
   if (!entry) return { key: "off", label: "OFF AIR", color: DIM };
   if (entry.state === "error") return { key: "warning", label: "WARNING", color: AMBER, detail: entry.detail };
   if (entry.state === "waiting-for-torbox") return { key: "warning", label: "WAITING", color: AMBER, detail: entry.detail };
+  if (entry.state === "waiting-for-budget") return { key: "warning", label: "BUDGET", color: AMBER, detail: entry.detail };
   if (entry.live) return { key: "healthy", label: "ON AIR", color: GREEN };
   if (entry.state === "provisioning") return { key: "generating", label: "GENERATING", color: AMBER, detail: entry.detail };
   if (entry.state === "ready") return { key: "healthy", label: "READY", color: GREEN };
@@ -1350,9 +1351,12 @@ function renderTopbarHealth() {
   else if (!state.status) { color = DIM; text = "checking"; }
   else {
     const problems = state.status.channels.filter(
-      (c) => c.state === "error" || c.state === "waiting-for-torbox",
+      (c) => c.state === "error" || c.state === "waiting-for-torbox" || c.state === "waiting-for-budget",
     ).length;
-    if (state.status.cooldownSeconds > 0) { color = AMBER; text = `cooldown ${state.status.cooldownSeconds}s`; }
+    const budget = state.status.debridBudget;
+    const budgetFull = budget && (budget.hourlyUsed >= budget.hourlyLimit || budget.dailyUsed >= budget.dailyLimit);
+    if (budgetFull) { color = AMBER; text = "debrid budget reached"; }
+    else if (state.status.cooldownSeconds > 0) { color = AMBER; text = `cooldown ${state.status.cooldownSeconds}s`; }
     else if (problems) { color = AMBER; text = `${problems} needing attention`; }
     else text = `${state.status.channels.filter((c) => c.live).length} on air`;
   }
@@ -1376,6 +1380,7 @@ function renderTiles() {
   const onAir = status ? status.channels.filter((c) => c.live).length : 0;
   const total = status ? status.channels.length : state.channels.length;
   const cooldown = status?.cooldownSeconds ?? 0;
+  const budget = status?.debridBudget;
   const encoder = state.debug?.channels[0]?.encoder;
   const ffmpeg = state.debug?.channels[0]?.ffmpegVersion;
 
@@ -1401,6 +1406,11 @@ function renderTiles() {
       dot: cooldown ? AMBER : GREEN,
       note: cooldown ? "Rate limited; scheduling resumes automatically." : "No rate limit in effect.",
     },
+    ...(budget ? [{
+      label: "Debrid budget", value: String(budget.hourlyUsed), unit: `of ${budget.hourlyLimit} / hour`,
+      dot: budget.hourlyUsed >= budget.hourlyLimit || budget.dailyUsed >= budget.dailyLimit ? AMBER : GREEN,
+      note: `${budget.dailyUsed} of ${budget.dailyLimit} operations used today (UTC).`,
+    }] : []),
   ];
 
   for (const tile of tiles) {
@@ -1493,6 +1503,12 @@ function buildWarnings() {
         detail: entry.detail || "Scheduling resumes automatically once the rate limit clears.",
         action: "View cooldown", act: () => go("ops"),
       });
+    } else if (entry.state === "waiting-for-budget") {
+      warnings.push({
+        color: AMBER, title: `${entry.name} reached the debrid operation budget`,
+        detail: entry.detail || "Scheduling resumes automatically when the budget resets.",
+        action: "View budget", act: () => go("ops"),
+      });
     } else if (entry.state === "provisioning") {
       warnings.push({
         color: AMBER, title: `${entry.name} is still generating`,
@@ -1569,6 +1585,12 @@ function renderDebrid() {
 
   cooldownNode.textContent = status.cooldownSeconds ? `cooldown ${status.cooldownSeconds}s` : "no cooldown";
   cooldownNode.style.color = status.cooldownSeconds ? AMBER : "var(--dim-2)";
+
+  if (status.debridBudget) {
+    const budget = status.debridBudget;
+    wrap.append(el("div", { className: "row mono", style: "font-size:12px;color:var(--text-2)" },
+      `Budget: ${budget.hourlyUsed}/${budget.hourlyLimit} this hour · ${budget.dailyUsed}/${budget.dailyLimit} today (UTC)`));
+  }
 
   const calls = Object.entries(status.debridCalls || {}).sort((a, b) => b[1] - a[1]);
   if (!calls.length) {
@@ -2074,6 +2096,16 @@ function buildDiagnostics() {
     });
   }
 
+  const budget = state.status?.debridBudget;
+  if (budget && (budget.hourlyUsed >= budget.hourlyLimit || budget.dailyUsed >= budget.dailyLimit)) {
+    entries.push({
+      color: AMBER, title: "Debrid operation budget reached", time: fmtTime(now),
+      plain: `Headend stopped new provider operations at ${budget.hourlyUsed}/${budget.hourlyLimit} this hour ` +
+        `and ${budget.dailyUsed}/${budget.dailyLimit} today. Existing scheduled playback remains available.`,
+      action: "View budget", act: () => go("dashboard"),
+    });
+  }
+
   for (const entry of state.status?.channels || []) {
     if (entry.state === "error") {
       entries.push({
@@ -2243,11 +2275,21 @@ $("#share-export").addEventListener("click", async () => {
 
 $("#share-import").addEventListener("click", () => {
   $("#share-result").textContent = "";
+  invalidateImportPreview();
   $("#share").showModal();
 });
 $("#share-cancel").addEventListener("click", () => $("#share").close());
 $("#share-preview").addEventListener("click", () => void runImport(true));
 $("#share-apply").addEventListener("click", () => void runImport(false));
+for (const selector of ["#share-url", "#share-json", "#share-mode"]) {
+  $(selector).addEventListener("input", invalidateImportPreview);
+  $(selector).addEventListener("change", invalidateImportPreview);
+}
+
+function invalidateImportPreview() {
+  $("#share").dataset.confirmation = "";
+  $("#share-apply").disabled = true;
+}
 
 async function runImport(dryRun) {
   const url = $("#share-url").value.trim();
@@ -2258,6 +2300,11 @@ async function runImport(dryRun) {
   if (url && raw) return toast("Use a URL or a pasted guide, not both", true);
 
   const payload = { mode: $("#share-mode").value, dryRun };
+  if (!dryRun) {
+    const confirmation = $("#share").dataset.confirmation;
+    if (!confirmation) return toast("Preview this guide before importing it", true);
+    payload.confirmation = confirmation;
+  }
   if (url) payload.url = url;
   else {
     try {
@@ -2275,17 +2322,25 @@ async function runImport(dryRun) {
     });
     const lines = [];
     if (res.note) lines.push(`Note from the author: ${res.note}`);
+    if (res.warning) lines.push(`Warning: ${res.warning}`);
+    if (res.artworkRemoved) lines.push(`Privacy: removed ${res.artworkRemoved} external poster URL${res.artworkRemoved === 1 ? "" : "s"}.`);
     if (res.added.length) lines.push(`Add: ${res.added.join(", ")}`);
     if (res.replaced.length) lines.push(`Replace: ${res.replaced.join(", ")}`);
     for (const r of res.renamed) lines.push(`Rename: ${r.from} → ${r.to}`);
     if (!lines.length) lines.push("Nothing to change.");
     out.textContent = lines.join("\n");
 
+    if (dryRun) {
+      $("#share").dataset.confirmation = res.confirmation;
+      $("#share-apply").disabled = false;
+    }
+
     if (!dryRun) {
       toast(`Imported ${res.added.length + res.replaced.length + res.renamed.length} channels`);
       $("#share").close();
       $("#share-url").value = "";
       $("#share-json").value = "";
+      invalidateImportPreview();
       await refreshChannels();
     }
   } catch (err) {

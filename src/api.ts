@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ChannelService } from "./channels.ts";
 import { writeChannelsFile } from "./channels-file.ts";
@@ -29,6 +30,7 @@ import { logger } from "./log.ts";
 import { findPreset, instantiate, loadPresets } from "./presets.ts";
 import { getGuide } from "./schedule/clock.ts";
 import { apiCallStats, cooldownRemainingSeconds } from "./content/providers/torbox.ts";
+import { fetchGuideBundle } from "./guide-import.ts";
 
 const log = logger("api");
 
@@ -45,17 +47,6 @@ const SERIES_GENRES = [
   ...MOVIE_GENRES, "Reality-TV", "Talk-Show", "Game-Show",
 ];
 
-/** A shared guide should be small; this is orders of magnitude above a real one. */
-const MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
-
-/**
- * Fetches a guide someone published.
- *
- * Deliberately not guarded against pointing at a private address: this endpoint is only
- * reachable from the machine itself or a host the operator named in `trustedHosts`, so
- * anyone who can call it could equally run `curl`. Blocking LAN URLs would stop someone
- * hosting guides on their own network while closing nothing.
- */
 function isHttpUrl(value: string): boolean {
   try {
     const { protocol } = new URL(value);
@@ -65,29 +56,14 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-async function fetchBundle(url: string): Promise<unknown> {
-  // Re-checked rather than assumed: this function must stay safe if it gains another
-  // caller that has not validated its input.
-  if (!isHttpUrl(url)) throw new Error("guide URL must be http or https");
-
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(15_000),
-    headers: { accept: "application/json, text/plain" },
-  });
-  if (!res.ok) throw new Error(`guide URL returned ${res.status}`);
-
-  const declared = Number(res.headers.get("content-length") ?? 0);
-  if (declared > MAX_BUNDLE_BYTES) throw new Error("guide is too large");
-
-  const text = await res.text();
-  if (text.length > MAX_BUNDLE_BYTES) throw new Error("guide is too large");
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    // A GitHub blob page rather than the raw file is the overwhelmingly likely mistake.
-    throw new Error("guide URL did not return JSON — link to the raw file, not a web page");
-  }
+function importConfirmation(
+  existing: readonly ChannelDef[],
+  incoming: readonly ChannelDef[],
+  mode: "add" | "replace" | "rename",
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ version: 1, mode, existing, incoming }))
+    .digest("hex");
 }
 
 export function registerApi(
@@ -96,6 +72,7 @@ export function registerApi(
   db: Db,
   config: Config,
   onReload: (channels: ChannelDef[]) => void,
+  mayDirectPlay: (req: FastifyRequest) => boolean = () => true,
 ): void {
   // ------------------------------------------------------------------ channels
 
@@ -168,6 +145,8 @@ export function registerApi(
       mode: z.enum(["add", "replace", "rename"]).default("add"),
       /** Preview the outcome without writing anything. */
       dryRun: z.boolean().default(false),
+      /** Digest returned by a preview of this exact guide and current lineup. */
+      confirmation: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "invalid import request" });
 
@@ -179,7 +158,7 @@ export function registerApi(
     let raw: unknown = body.data.bundle;
     if (url !== undefined) {
       try {
-        raw = await fetchBundle(url);
+        raw = await fetchGuideBundle(url, { allowPrivate: config.allowPrivateGuideImports });
       } catch (err) {
         return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
       }
@@ -195,8 +174,27 @@ export function registerApi(
       });
     }
 
+    const importedSources = bundle.channels.reduce(
+      (count, channel) => count + Number(channel.source !== undefined) +
+        channel.pools.filter((pool) => pool.source !== undefined).length,
+      0,
+    );
+    if (importedSources > 0 && !config.allowImportedGuideSources) {
+      return reply.code(400).send({
+        error: "guide contains automatic content sources",
+        detail: "imported sources are disabled because they can use this server's catalogue credentials; use an explicit-title guide or set allowImportedGuideSources=true",
+      });
+    }
+
+    const artworkRemoved = config.allowImportedGuideArtwork
+      ? 0
+      : bundle.channels.filter((channel) => channel.poster !== undefined).length;
+    const incoming = config.allowImportedGuideArtwork
+      ? bundle.channels
+      : bundle.channels.map(({ poster: _poster, ...channel }) => channelSchema.parse(channel));
+
     // Two channels sharing an id inside one bundle would silently drop one on write.
-    const ids = bundle.channels.map((c) => c.id);
+    const ids = incoming.map((c) => c.id);
     const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
     if (duplicate) {
       return reply.code(400).send({ error: `guide contains duplicate channel id: ${duplicate}` });
@@ -204,7 +202,7 @@ export function registerApi(
 
     let merged;
     try {
-      merged = mergeImported(service.list(), bundle.channels, mode);
+      merged = mergeImported(service.list(), incoming, mode);
     } catch (err) {
       if (err instanceof ImportConflictError) {
         return reply.code(409).send({
@@ -221,8 +219,18 @@ export function registerApi(
       replaced: merged.replaced,
       renamed: merged.renamed,
       note: bundle.note ?? null,
+      artworkRemoved,
+      importedSources,
+      warning: "Imported guides are untrusted programming data. Playback is not verified; confirming may begin catalogue and debrid resolution for changed channels.",
     };
-    if (dryRun) return { ok: true, dryRun: true, ...summary };
+    const confirmation = importConfirmation(service.list(), incoming, mode);
+    if (dryRun) return { ok: true, dryRun: true, confirmation, ...summary };
+    if (body.data.confirmation !== confirmation) {
+      return reply.code(428).send({
+        error: "preview this exact guide before importing it",
+        hint: "send dryRun=true, review the result, then resend with its confirmation value",
+      });
+    }
 
     try {
       writeChannelsFile(config.channelsFile, merged.channels);
@@ -451,7 +459,9 @@ export function registerApi(
     const presets = loadPresets();
     const labeled = await service.channelsWithNames(presets.map((preset) => preset.channel));
     return presets.map((p, index) => {
-      const existingChannelId = service.get(p.channel.id)?.id ?? null;
+      const existingChannelId = [p.channel.id, ...p.legacyIds]
+        .map((id) => service.get(id)?.id)
+        .find(Boolean) ?? null;
       return {
         key: p.key,
         label: p.label,
@@ -480,7 +490,8 @@ export function registerApi(
     if (!preset) return reply.code(404).send({ error: "no such preset" });
 
     const existing = service.list();
-    const conflict = existing.find((channel) => channel.id === preset.channel.id);
+    const recognizedIds = new Set([preset.channel.id, ...preset.legacyIds]);
+    const conflict = existing.find((channel) => recognizedIds.has(channel.id));
     if (conflict && body.data.mode === "add") {
       return reply.code(409).send({
         error: `channel ${conflict.id} already represents this preset`,
@@ -569,7 +580,11 @@ export function registerApi(
     const channelId = decodeURIComponent(req.params.channelId);
     if (!service.get(channelId)) return reply.code(404).send({ error: "no such channel" });
 
-    const instruction = await service.directTune(channelId);
+    const instruction = await service.directTune(
+      channelId,
+      Date.now(),
+      mayDirectPlay(req) || config.remoteDirectPlay,
+    );
     if (!instruction) {
       return reply.code(503).header("Retry-After", "2").send({ error: "channel is not ready" });
     }
@@ -579,6 +594,7 @@ export function registerApi(
 
   app.get("/api/status", async () => ({
     cooldownSeconds: cooldownRemainingSeconds(),
+    debridBudget: service.debridBudgetStatus(),
     // Carries the access token in full. Safe only because /api is unreachable from
     // anywhere but this machine and the hosts named in trustedHosts.
     installUrl: `${baseUrl(config)}${urlPrefix(config)}/manifest.json`,

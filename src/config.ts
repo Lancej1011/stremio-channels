@@ -1,6 +1,7 @@
-import { readFileSync, existsSync } from "node:fs";
+import { chmodSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
+import { secretFromEnv } from "./secrets.ts";
 
 /** A single scheduleable unit of content. Series entries expand into one ref per episode. */
 export const contentRefSchema = z.object({
@@ -139,10 +140,10 @@ export const contentPoolSchema = z.object({
   id: z.string().regex(LOCAL_ID, "lowercase letters, digits and dashes only"),
   name: z.string().min(1),
   /** Explicit titles are pins and remain even when a live source changes. */
-  content: z.array(contentRefSchema).default([]),
+  content: z.array(contentRefSchema).max(2000).default([]),
   source: sourceSchema.optional(),
   /** Applies to source matches only; explicitly pinned content always wins. */
-  excluded: z.array(excludedTitleSchema).default([]),
+  excluded: z.array(excludedTitleSchema).max(2000).default([]),
   refreshHours: z.number().positive().default(168),
 }).refine((pool) => pool.content.length > 0 || pool.source !== undefined, {
   message: "a pool needs pinned content or an automatic source",
@@ -155,23 +156,25 @@ export const channelSchema = z.object({
   id: z
     .string()
     .regex(LOCAL_ID, "lowercase letters, digits and dashes only"),
-  name: z.string().min(1),
-  poster: z.string().url().optional(),
-  description: z.string().optional(),
+  name: z.string().min(1).max(120),
+  poster: z.string().url().refine((value) => new URL(value).protocol === "https:", {
+    message: "poster must use https",
+  }).optional(),
+  description: z.string().max(1000).optional(),
   strategy: strategySchema.default("shuffle"),
   /** Fixes the deterministic schedule. Change it to reshuffle the channel. */
   seed: z.number().int().default(1),
   /** Hand-picked titles. May be empty when `source` populates the channel instead. */
-  content: z.array(contentRefSchema).default([]),
+  content: z.array(contentRefSchema).max(2000).default([]),
   /** Auto-populates the channel. Anything in `content` is kept and added to. */
   source: sourceSchema.optional(),
   /** How long a source's result is reused before being fetched again. */
   refreshHours: z.number().positive().default(168),
   /** Canonical creator model. Legacy content/source remain supported when this is empty. */
-  pools: z.array(contentPoolSchema).default([]),
-  defaultPoolIds: z.array(z.string().regex(LOCAL_ID)).default([]),
+  pools: z.array(contentPoolSchema).max(50).default([]),
+  defaultPoolIds: z.array(z.string().regex(LOCAL_ID)).max(50).default([]),
   /** Optional overrides for parts of the day. Uncovered hours use the channel default. */
-  dayparts: z.array(daypartSchema).default([]),
+  dayparts: z.array(daypartSchema).max(100).default([]),
 }).superRefine((channel, ctx) => {
   const usingPools = channel.pools.length > 0;
   const usingLegacy = channel.content.length > 0 || channel.source !== undefined;
@@ -260,14 +263,14 @@ function optionalUrl() {
  */
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
-function optionalToken() {
+function optionalToken(name = "accessToken") {
   return z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z
       .string()
       .regex(
         TOKEN_PATTERN,
-        "accessToken must be 16-128 characters of A-Z a-z 0-9 _ - " +
+        `${name} must be 16-128 characters of A-Z a-z 0-9 _ - ` +
           '(generate one with: node -e "console.log(require(\'node:crypto\').randomBytes(24).toString(\'base64url\'))")',
       )
       .optional(),
@@ -313,6 +316,21 @@ const configSchema = z.object({
         : value,
     z.array(z.string()).default([]),
   ),
+  /** Explicit acknowledgement for trusted-LAN/container binds without an access token. */
+  allowUnauthenticatedNonLoopback: booleanish(false),
+  /** Permit guide URLs to reach private/LAN addresses. Off to prevent SSRF by default. */
+  allowPrivateGuideImports: booleanish(false),
+  /** Keep third-party poster URLs from imported guides. Off avoids viewer tracking. */
+  allowImportedGuideArtwork: booleanish(false),
+  /** Permit imported automatic sources to use this installation's catalogue credentials. */
+  allowImportedGuideSources: booleanish(false),
+
+  /** Failed remote token attempts permitted per client before a temporary block. */
+  authFailureLimit: z.coerce.number().int().positive().max(10_000).default(20),
+  authFailureWindowSeconds: z.coerce.number().int().positive().max(86_400).default(300),
+  authBlockSeconds: z.coerce.number().int().positive().max(86_400).default(900),
+  /** Remote requests that can create a tune/playback session, per client per minute. */
+  tuneRequestLimitPerMinute: z.coerce.number().int().positive().max(10_000).default(30),
 
   /**
    * A Stremio stream addon already configured with your debrid key
@@ -320,6 +338,13 @@ const configSchema = z.object({
    * seekable HTTPS URLs, which is why Phase 1 needs no TorBox code of its own.
    */
   streamAddonUrl: optionalUrl(),
+
+  /**
+   * Authenticated local credential broker. When configured this takes precedence over a
+   * legacy in-process TorBox key, keeping the provider credential out of Headend.
+   */
+  debridAgentUrl: optionalUrl(),
+  debridAgentToken: optionalToken("debridAgentToken"),
 
   /**
    * TorBox API key. When set, programs resolve through TorBox directly and
@@ -426,6 +451,13 @@ const configSchema = z.object({
    * least recently used session is evicted rather than failing the new viewer.
    */
   maxSessions: z.coerce.number().int().positive().default(6),
+  /** Signed provider URLs are private capabilities and are local-only by default. */
+  remoteDirectPlay: booleanish(false),
+  /** Store signed provider URLs only in process memory unless explicitly opted back in. */
+  persistResolvedUrls: booleanish(false),
+  /** Persisted provider-operation ceilings for direct TorBox and the isolated agent. */
+  debridHourlyOperationLimit: z.coerce.number().int().positive().max(100_000).default(120),
+  debridDailyOperationLimit: z.coerce.number().int().positive().max(1_000_000).default(1000),
   /** How far ahead the scheduler keeps the timeline filled. */
   scheduleHorizonHours: z.number().default(24),
   /**
@@ -458,10 +490,20 @@ function fromEnv(): Record<string, unknown> {
     publicBaseUrl: e.PUBLIC_BASE_URL,
     accessToken: e.ACCESS_TOKEN,
     trustedHosts: e.TRUSTED_HOSTS,
+    allowUnauthenticatedNonLoopback: e.ALLOW_UNAUTHENTICATED_NON_LOOPBACK,
+    allowPrivateGuideImports: e.ALLOW_PRIVATE_GUIDE_IMPORTS,
+    allowImportedGuideArtwork: e.ALLOW_IMPORTED_GUIDE_ARTWORK,
+    allowImportedGuideSources: e.ALLOW_IMPORTED_GUIDE_SOURCES,
+    authFailureLimit: e.AUTH_FAILURE_LIMIT,
+    authFailureWindowSeconds: e.AUTH_FAILURE_WINDOW_SECONDS,
+    authBlockSeconds: e.AUTH_BLOCK_SECONDS,
+    tuneRequestLimitPerMinute: e.TUNE_REQUEST_LIMIT_PER_MINUTE,
     dataDir: e.DATA_DIR,
     channelsFile: e.CHANNELS_FILE,
     streamAddonUrl: e.STREAM_ADDON_URL,
-    torboxApiKey: e.TORBOX_API_KEY,
+    debridAgentUrl: e.DEBRID_AGENT_URL,
+    debridAgentToken: secretFromEnv("DEBRID_AGENT_TOKEN"),
+    torboxApiKey: secretFromEnv("TORBOX_API_KEY"),
     indexerUrl: e.INDEXER_URL,
     mdblistApiKey: e.MDBLIST_API_KEY,
     traktClientId: e.TRAKT_CLIENT_ID,
@@ -469,6 +511,10 @@ function fromEnv(): Record<string, unknown> {
     tmdbReadAccessToken: e.TMDB_API_TOKEN,
     tmdbApiKey: e.TMDB_API_KEY,
     encoder: e.ENCODER,
+    remoteDirectPlay: e.REMOTE_DIRECT_PLAY,
+    persistResolvedUrls: e.PERSIST_RESOLVED_URLS,
+    debridHourlyOperationLimit: e.DEBRID_HOURLY_OPERATION_LIMIT,
+    debridDailyOperationLimit: e.DEBRID_DAILY_OPERATION_LIMIT,
   };
   for (const k of Object.keys(raw)) if (raw[k] === undefined) delete raw[k];
   return raw;
@@ -502,7 +548,15 @@ function nestedFromEnv(): Record<string, Record<string, unknown>> {
 }
 
 export function loadConfig(configPath = "./config.json"): Config {
-  const fileConfig = existsSync(configPath)
+  const hasConfig = existsSync(configPath);
+  if (hasConfig) {
+    try {
+      chmodSync(configPath, 0o600);
+    } catch {
+      // Shared/FAT-like mounts may not implement Unix permission bits.
+    }
+  }
+  const fileConfig = hasConfig
     ? (JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>)
     : {};
 
@@ -517,11 +571,30 @@ export function loadConfig(configPath = "./config.json"): Config {
   }
 
   const parsed = configSchema.parse(merged);
+  if (Boolean(parsed.debridAgentUrl) !== Boolean(parsed.debridAgentToken)) {
+    throw new Error("debridAgentUrl and debridAgentToken must be configured together");
+  }
+  const publicHost = parsed.publicBaseUrl ? new URL(parsed.publicBaseUrl).hostname : undefined;
+  const outsideLoopback = !loopbackHost(parsed.host) || Boolean(publicHost && !loopbackHost(publicHost));
+  if (
+    !parsed.accessToken &&
+    outsideLoopback &&
+    !parsed.allowUnauthenticatedNonLoopback
+  ) {
+    throw new Error(
+      "refusing an unauthenticated non-loopback bind; configure accessToken or explicitly " +
+        "set allowUnauthenticatedNonLoopback=true for a trusted LAN/container boundary",
+    );
+  }
   return {
     ...parsed,
     dataDir: resolve(parsed.dataDir),
     channelsFile: resolve(parsed.channelsFile),
   };
+}
+
+function loopbackHost(value: string): boolean {
+  return /^(127\.|localhost$|::1$|\[::1\])/i.test(value);
 }
 
 export function loadChannels(path: string): ChannelDef[] {

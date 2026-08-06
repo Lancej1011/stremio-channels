@@ -1,11 +1,11 @@
 {
-  "key": "cartoon-network-90s",
-  "label": "Cartoon Network Classics & Hits",
+  "key": "animation-eras",
+  "label": "Animation Eras",
   "summary": "A 35-title lineup spanning the original Cartoon Cartoons, action favorites and the biggest later-era hits.",
   "channel": {
     "id": "cartoons",
-    "name": "Cartoon Cartoons",
-    "description": "Cartoon Network favorites from the original Cartoon Cartoons through the biggest modern classics.",
+    "name": "Animation Eras",
+    "description": "Animation favorites spanning early originals, action series and later-era classics.",
     "strategy": "sequential",
     "seed": 1990,
     "content": [],

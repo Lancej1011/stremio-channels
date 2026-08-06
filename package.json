@@ -18,7 +18,8 @@
   },
   "main": "dist/server.js",
   "bin": {
-    "stremio-channels": "dist/server.js"
+    "stremio-channels": "dist/server.js",
+    "stremio-channels-debrid-agent": "dist/debrid-agent.js"
   },
   "files": [
     "dist",
@@ -27,10 +28,12 @@
     "channels.example.json",
     "config.example.json",
     "README.md",
-    "DOCKER.md"
+    "DOCKER.md",
+    "RELEASING.md"
   ],
   "scripts": {
-    "build": "tsc && npm run copy-assets",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc && npm run copy-assets",
     "copy-assets": "node -e \"const fs=require('fs'); fs.cpSync('src/ui','dist/ui',{recursive:true}); fs.cpSync('src/viewer','dist/viewer',{recursive:true})\"",
     "dev": "tsx watch src/server.ts",
     "desktop": "python3 desktop/headend.py",
@@ -39,6 +42,10 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:integration": "tsx --test \"src/**/*.itest.ts\"",
+    "licenses:check": "node scripts/license-inventory.mjs --check",
+    "licenses:report": "node scripts/license-inventory.mjs",
+    "sbom": "cyclonedx-npm --omit dev --output-reproducible --validate",
+    "workflows:check": "node scripts/check-workflow-pins.mjs",
     "prepare": "npm run build"
   },
   "dependencies": {
@@ -48,6 +55,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "6.0.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.13.1",
     "tsx": "^4.19.2",

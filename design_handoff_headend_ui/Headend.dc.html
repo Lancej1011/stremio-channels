@@ -525,23 +525,23 @@ const CHANNELS = [
     programs: ["Firefly — S01E05 Out of Gas", "Battlestar Galactica — S02E11 Resurrection Ship", "Blade Runner 2049", "Farscape — S03E04 Self Inflicted Wounds", "Babylon 5 — S03E16 War Without End", "The X-Files — S05E05 The Post-Modern Prometheus"] },
   { id: "sitcoms", name: "90s Sitcoms", strategy: "shuffle", seed: 7, status: "live", titles: 23, pools: 0,
     programs: ["Seinfeld — S06E12 The Label Maker", "Frasier — S03E17 High Crane Drifter", "NewsRadio — S02E08 Rat Funeral", "Friends — S04E09 The One Where They're Going to Party", "Spin City — S01E14 The Great Pretender", "Just Shoot Me — S02E03 Old Boyfriends"] },
-  { id: "boomerang-classics", name: "Boomerang Classics", strategy: "sequential", seed: 1992, status: "live", titles: 41, pools: 5,
+  { id: "cartoon-time-capsule", name: "Cartoon Time Capsule", strategy: "sequential", seed: 1992, status: "live", titles: 41, pools: 5,
     programs: ["Scooby-Doo, Where Are You! — S01E09", "The Flintstones — S03E14", "Jonny Quest — S01E11", "Top Cat — S01E06", "Wacky Races — S01E12", "Dexter's Laboratory — S02E07"] },
-  { id: "cartoon-network-90s", name: "Cartoon Network Classics & Hits", strategy: "sequential", seed: 1996, status: "generating", titles: 38, pools: 4,
+  { id: "animation-eras", name: "Animation Eras", strategy: "sequential", seed: 1996, status: "generating", titles: 38, pools: 4,
     programs: ["Courage the Cowardly Dog — S01E03", "Samurai Jack — S02E05", "Ed, Edd n Eddy — S01E08", "Johnny Bravo — S02E02", "The Powerpuff Girls — S03E11", "Ben 10 — S01E07"] },
-  { id: "adult-swim", name: "Adult Swim", strategy: "weighted", seed: 2001, status: "warning", titles: 12, pools: 3,
+  { id: "after-dark-animation", name: "After Dark Animation", strategy: "weighted", seed: 2001, status: "warning", titles: 12, pools: 3,
     programs: ["Aqua Teen Hunger Force — S03E04", "The Venture Bros. — S02E09", "Robot Chicken — S04E12", "Metalocalypse — S02E03", "Space Ghost Coast to Coast — S05E02", "Rick and Morty — S03E06"] },
-  { id: "nicktoons-90s", name: "Nicktoons", strategy: "sequential", seed: 1994, status: "off", titles: 18, pools: 3,
+  { id: "nineties-animation", name: "90s Animation", strategy: "sequential", seed: 1994, status: "off", titles: 18, pools: 3,
     programs: ["Rugrats — S03E12", "Hey Arnold! — S02E07", "Doug — S01E09", "The Ren & Stimpy Show — S02E04", "Rocko's Modern Life — S03E05", "CatDog — S01E10"] },
-  { id: "disney-afternoon", name: "Disney Afternoon", strategy: "sequential", seed: 1990, status: "off", titles: 22, pools: 4,
+  { id: "animated-adventures", name: "Animated Adventures", strategy: "sequential", seed: 1990, status: "off", titles: 22, pools: 4,
     programs: ["DuckTales — S02E14", "Darkwing Duck — S01E06", "TaleSpin — S01E19", "Chip 'n Dale Rescue Rangers — S02E03", "Gargoyles — S02E21", "Goof Troop — S01E11"] },
-  { id: "nick-at-nite", name: "Nick at Nite", strategy: "weighted", seed: 1985, status: "off", titles: 20, pools: 3,
+  { id: "classic-sitcom-nights", name: "Classic Sitcom Nights", strategy: "weighted", seed: 1985, status: "off", titles: 20, pools: 3,
     programs: ["The Dick Van Dyke Show — S03E08", "Bewitched — S02E12", "Taxi — S04E05", "Cheers — S06E14", "The Munsters — S01E17", "I Love Lucy — S04E09"] },
-  { id: "comedy-central", name: "Comedy Central", strategy: "weighted", seed: 1991, status: "off", titles: 16, pools: 3,
+  { id: "comedy-channel", name: "Comedy Channel", strategy: "weighted", seed: 1991, status: "off", titles: 16, pools: 3,
     programs: ["Reno 911! — S02E06", "Strangers with Candy", "Chappelle's Show — S02E04", "South Park — S07E09", "Drunk History — S03E02", "Key & Peele — S04E07"] },
   { id: "scifi-channel", name: "Sci-Fi Channel", strategy: "sequential", seed: 1992, status: "off", titles: 9, pools: 2,
     programs: ["The Twilight Zone — S02E06", "Quantum Leap — S03E15", "Stargate SG-1 — S04E08", "The Outer Limits — S02E11", "Sliders — S02E04", "The X-Files — S06E03"] },
-  { id: "fox5-morning", name: "Fox 5 Morning", strategy: "sequential", seed: 1993, status: "off", titles: 14, pools: 3,
+  { id: "school-morning-throwback", name: "School-Morning Throwback", strategy: "sequential", seed: 1993, status: "off", titles: 14, pools: 3,
     programs: ["Animaniacs — S01E22", "X-Men — S02E09", "Batman: The Animated Series — S01E14", "Tiny Toon Adventures — S02E06", "Spider-Man — S01E08", "Bobby's World — S03E04"] },
 ];
 
@@ -553,31 +553,31 @@ const STATUS = {
 };
 
 const PRESETS = [
-  { key: "boomerang-classics", label: "Boomerang Classics", titles: 41, pools: 5, installed: true,
+  { key: "cartoon-time-capsule", label: "Cartoon Time Capsule", titles: 41, pools: 5, installed: true,
     summary: "Forty-one cartoon favorites spanning Scooby mysteries, Hanna-Barbera comedy, theatrical shorts and retro favorites.",
-    dayparts: [["06:00–11:00", "Breakfast Cartoons"], ["11:00–14:00", "Scooby Mystery Marathon"], ["14:00–19:00", "Hanna-Barbera Afternoon"], ["19:00–22:00", "Boomerang Prime Time"], ["22:00–02:00", "Action All-Stars"]] },
-  { key: "cartoon-network-90s", label: "Cartoon Network Classics & Hits", titles: 38, pools: 4, installed: true,
+    dayparts: [["06:00–11:00", "Breakfast Cartoons"], ["11:00–14:00", "Scooby Mystery Marathon"], ["14:00–19:00", "Hanna-Barbera Afternoon"], ["19:00–22:00", "Prime-Time Cartoons"], ["22:00–02:00", "Action All-Stars"]] },
+  { key: "animation-eras", label: "Animation Eras", titles: 38, pools: 4, installed: true,
     summary: "Cartoon Cartoons mornings, afternoon action, modern prime time.",
     dayparts: [["06:00–12:00", "Cartoon Cartoons"], ["12:00–17:00", "Afternoon Action"], ["17:00–22:00", "Prime Time"], ["22:00–02:00", "Late Block"]] },
-  { key: "adult-swim", label: "Adult Swim", titles: 12, pools: 3, installed: true,
+  { key: "after-dark-animation", label: "After Dark Animation", titles: 12, pools: 3, installed: true,
     summary: "Adult animation, weighted heavily to the small hours.",
     dayparts: [["20:00–23:00", "Early Fringe"], ["23:00–03:00", "The Small Hours"], ["03:00–06:00", "Overnight Loop"]] },
-  { key: "nicktoons-90s", label: "Nicktoons", titles: 18, pools: 3, installed: true,
-    summary: "90s Nick animation split into morning, afternoon and late blocks.",
-    dayparts: [["07:00–12:00", "Morning Nick"], ["12:00–18:00", "Afternoon Nick"], ["18:00–23:00", "Late Nicktoons"]] },
-  { key: "disney-afternoon", label: "Disney Afternoon", titles: 22, pools: 4, installed: false,
+  { key: "nineties-animation", label: "90s Animation", titles: 18, pools: 3, installed: true,
+    summary: "90s animation split into morning, afternoon and late blocks.",
+    dayparts: [["07:00–12:00", "Morning Animation"], ["12:00–18:00", "Afternoon Animation"], ["18:00–23:00", "Late Animation"]] },
+  { key: "animated-adventures", label: "Animated Adventures", titles: 22, pools: 4, installed: false,
     summary: "The classic animated afternoon, modern Disney in the evening.",
     dayparts: [["06:00–15:00", "Morning Animation"], ["15:00–18:00", "The Afternoon"], ["18:00–23:00", "Modern Disney"]] },
   { key: "scifi-channel", label: "Sci-Fi Channel", titles: 9, pools: 2, installed: false,
     summary: "Anthology mornings, serialised prime time, overnight X-Files.",
     dayparts: [["06:00–12:00", "Anthology Mornings"], ["12:00–20:00", "Serial Afternoon"], ["20:00–23:00", "Prime Serials"], ["23:00–06:00", "Overnight Files"]] },
-  { key: "nick-at-nite", label: "Nick at Nite / classic sitcoms", titles: 20, pools: 3, installed: false,
+  { key: "classic-sitcom-nights", label: "Classic Sitcom Nights", titles: 20, pools: 3, installed: false,
     summary: "Retro mornings, 90s staples weighted into prime time.",
     dayparts: [["06:00–12:00", "Retro Mornings"], ["12:00–20:00", "Daytime Reruns"], ["20:00–00:00", "Prime Sitcoms"]] },
-  { key: "comedy-central", label: "Comedy Central", titles: 16, pools: 3, installed: false,
+  { key: "comedy-channel", label: "Comedy Channel", titles: 16, pools: 3, installed: false,
     summary: "Daytime comedy, the raunchier material kept after 22:00.",
     dayparts: [["09:00–17:00", "Daytime Comedy"], ["17:00–22:00", "Evening Stand-Up"], ["22:00–02:00", "After Hours"]] },
-  { key: "fox5-morning", label: "Fox 5 Morning", titles: 14, pools: 3, installed: false,
+  { key: "school-morning-throwback", label: "School-Morning Throwback", titles: 14, pools: 3, installed: false,
     summary: "School-morning cartoons and syndicated action throwbacks.",
     dayparts: [["06:00–09:00", "School Morning"], ["15:00–18:00", "Afternoon Block"], ["18:00–20:00", "Syndicated Action"]] },
 ];
@@ -608,10 +608,10 @@ const SEARCH = [
 ];
 
 const DIAGNOSTICS = [
-  { title: "Program skipped on Adult Swim", plain: "No cached release was available for The Venture Bros. S02E09 within the debrid cooldown, so the slot advanced to the next title. Nothing dropped off air.", action: "Retry resolve", color: AMBER, time: "18:04" },
+  { title: "Program skipped on After Dark Animation", plain: "No cached release was available for The Venture Bros. S02E09 within the debrid cooldown, so the slot advanced to the next title. Nothing dropped off air.", action: "Retry resolve", color: AMBER, time: "18:04" },
   { title: "Debrid returned 429", plain: "TorBox rate-limited two torrent lookups. A shared 90-second cooldown is in effect and the horizon keeper will resume on its own.", action: "View cooldown", color: AMBER, time: "17:52" },
-  { title: "Session evicted at maxSessions", plain: "A sixth viewer tuned in while five encoders were running. The least recently active session on Nicktoons was closed.", action: "Raise maxSessions", color: BLUE, time: "17:31" },
-  { title: "Codec mismatch on Fox 5 Morning", plain: "The advertised CODECS string does not match the codec measured from a real segment, which can stop playback on ExoPlayer devices.", action: "Re-measure", color: RED, time: "16:58" },
+  { title: "Session evicted at maxSessions", plain: "A sixth viewer tuned in while five encoders were running. The least recently active session on 90s Animation was closed.", action: "Raise maxSessions", color: BLUE, time: "17:31" },
+  { title: "Codec mismatch on School-Morning Throwback", plain: "The advertised CODECS string does not match the codec measured from a real segment, which can stop playback on ExoPlayer devices.", action: "Re-measure", color: RED, time: "16:58" },
 ];
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -625,7 +625,7 @@ class Component extends DCLogic {
     strategy: "sequential",
     guideHours: 6,
     query: "scooby",
-    name: "Boomerang Classics",
+    name: "Cartoon Time Capsule",
     seed: "1992",
     live: false,
     toast: "",
@@ -780,7 +780,7 @@ class Component extends DCLogic {
       viewSub: {
         dashboard: "Service health, running feeds and schedule coverage",
         channels: `${enriched.length} channels · ${onAir.length} on air`,
-        editor: "Boomerang Classics · draft restored from local storage",
+        editor: "Cartoon Time Capsule · draft restored from local storage",
         presets: "Nine ready-made lineups with daypart grids",
         guide: `Next ${guideHours} hours across every channel`,
         ops: "Sessions, encoders, horizon progress and diagnostics",
@@ -803,8 +803,8 @@ class Component extends DCLogic {
       onAir, onAirCount: onAir.length, horizonHours: 24,
 
       warnings: [
-        { title: "Adult Swim horizon is 14h of 24h", detail: "Two overnight blocks have no resolvable release yet. The horizon keeper retries every five minutes.", action: "Regenerate channel", color: AMBER, act: this.note("Queued regenerate for adult-swim"), },
-        { title: "Nicktoons has an uncovered 02:00–07:00 window", detail: "Dayparts leave five hours to the channel default, which is fine — flagged so it is deliberate.", action: "Open editor", color: BLUE, act: this.go("editor") },
+        { title: "After Dark Animation horizon is 14h of 24h", detail: "Two overnight blocks have no resolvable release yet. The horizon keeper retries every five minutes.", action: "Regenerate channel", color: AMBER, act: this.note("Queued regenerate for after-dark-animation"), },
+        { title: "90s Animation has an uncovered 02:00–07:00 window", detail: "Dayparts leave five hours to the channel default, which is fine — flagged so it is deliberate.", action: "Open editor", color: BLUE, act: this.go("editor") },
         { title: "publicBaseUrl points at 127.0.0.1", detail: "Stream URLs are unreachable from other devices until this is a Tailscale origin.", action: "Show config", color: AMBER, act: this.note("publicBaseUrl is set from PUBLIC_BASE_URL") },
       ],
       cooldownLabel: "cooldown 0s", cooldownColor: GREEN,
@@ -819,8 +819,8 @@ class Component extends DCLogic {
       visibleChannels: filter === "all" ? enriched : enriched.filter((c) => c.status === filter),
       newChannel: this.go("editor"),
 
-      editorBreadcrumb: "Channels / Boomerang Classics / boomerang-classics",
-      draftName: this.state.name, draftId: "boomerang-classics", draftSeed: this.state.seed,
+      editorBreadcrumb: "Channels / Cartoon Time Capsule / cartoon-time-capsule",
+      draftName: this.state.name, draftId: "cartoon-time-capsule", draftSeed: this.state.seed,
       setName: (e) => this.setState({ name: e.target.value }),
       setSeed: (e) => this.setState({ seed: e.target.value }),
       strategies,
@@ -843,7 +843,7 @@ class Component extends DCLogic {
       searchResults: SEARCH.map(([name, meta]) => ({ name, meta, add: this.note(`Pinned ${name}`) })),
       searchNote: "Results are annotated with network and years from TVmaze, so an era-accurate lineup can be assembled by hand.",
       projection, preview12: this.note("Projected 12 hours without touching TorBox"),
-      save: this.note("Saved · channels.json written, boomerang-classics rebuilt"),
+      save: this.note("Saved · channels.json written, cartoon-time-capsule rebuilt"),
 
       presets: PRESETS.map((p) => ({
         key: p.key, label: p.label, summary: p.summary, titles: p.titles, poolCount: p.pools,
@@ -877,9 +877,9 @@ class Component extends DCLogic {
           pct, color: pct > 90 ? GREEN : AMBER, label: pct === 100 ? "complete" : `${pct}%` };
       }),
       diagnostics: DIAGNOSTICS.map((d) => ({ ...d, act: this.note(d.action), detailAct: this.note("GET /debug/hls/<channel>") })),
-      previewChannel: "boomerang-classics",
-      skip: this.note("POST /api/channels/boomerang-classics/skip"),
-      regenerate: this.note("POST /api/channels/boomerang-classics/regenerate"),
+      previewChannel: "cartoon-time-capsule",
+      skip: this.note("POST /api/channels/cartoon-time-capsule/skip"),
+      regenerate: this.note("POST /api/channels/cartoon-time-capsule/regenerate"),
     };
   }
 }

@@ -46,6 +46,7 @@ function makeApp(overrides: Partial<Config> = {}) {
   const access = createAccessControl(config);
   const app = Fastify({ rewriteUrl: access.rewriteUrl });
   app.addHook("onRequest", access.guard);
+  app.addHook("onRequest", access.throttle);
   app.addHook("onSend", async (req, reply) => {
     if (access.corsAllowed(req.url)) reply.header("Access-Control-Allow-Origin", "*");
   });
@@ -210,6 +211,31 @@ describe("access control, token configured", () => {
     assert.equal(res.statusCode, 404);
     assert.equal(res.body, "not found");
     assert.match(res.headers["content-type"] as string, /text\/plain/);
+    await app.close();
+  });
+
+  it("slows and closes repeated failed-token connections without changing the 404", async () => {
+    const app = makeApp({ accessToken: TOKEN, authFailureLimit: 1 });
+    const first = await get(app, `/wrong${PATHS.manifest}`, PUBLIC);
+    assert.equal(first.statusCode, 404);
+    const started = Date.now();
+    const limited = await get(app, `/still-wrong${PATHS.manifest}`, PUBLIC);
+    assert.equal(limited.statusCode, 404);
+    assert.equal(limited.body, "not found");
+    assert.equal(limited.headers.connection, "close");
+    assert.ok(Date.now() - started >= 200);
+    await app.close();
+  });
+
+  it("limits remote tune/session allocation while leaving ordinary reads available", async () => {
+    const app = makeApp({ accessToken: TOKEN, tuneRequestLimitPerMinute: 2 });
+    for (let index = 0; index < 2; index++) {
+      assert.equal((await get(app, `/${TOKEN}${PATHS.viewerTune}`, PUBLIC)).statusCode, 200);
+    }
+    const limited = await get(app, `/${TOKEN}${PATHS.viewerTune}`, PUBLIC);
+    assert.equal(limited.statusCode, 429);
+    assert.equal(limited.headers["retry-after"], "60");
+    assert.equal((await get(app, `/${TOKEN}${PATHS.viewerGuide}`, PUBLIC)).statusCode, 200);
     await app.close();
   });
 });

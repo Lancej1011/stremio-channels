@@ -26,6 +26,8 @@ export const SHARE_VERSION = 1;
  * an import cannot be used to exhaust memory or write a pathological channels.json.
  */
 const MAX_CHANNELS = 200;
+const MAX_TOTAL_REFS = 10_000;
+const MAX_TOTAL_SOURCE_RESULTS = 5_000;
 
 export const shareBundleSchema = z.object({
   kind: z.literal(SHARE_KIND),
@@ -72,7 +74,25 @@ export function buildBundle(channels: ChannelDef[], note?: string): ShareBundle 
 
 /** Parses untrusted input. Throws a ZodError describing what was wrong with it. */
 export function parseBundle(input: unknown): ShareBundle {
-  return shareBundleSchema.parse(input);
+  const bundle = shareBundleSchema.parse(input);
+  let refs = 0;
+  let sourceResults = 0;
+  for (const channel of bundle.channels) {
+    refs += channel.content.length;
+    sourceResults += channel.source?.limit ?? 0;
+    for (const pool of channel.pools) {
+      refs += pool.content.length + pool.excluded.length;
+      sourceResults += pool.source?.limit ?? 0;
+    }
+    for (const daypart of channel.dayparts) refs += daypart.content?.length ?? 0;
+  }
+  if (refs > MAX_TOTAL_REFS) {
+    throw new Error(`guide contains too many title references (maximum ${MAX_TOTAL_REFS})`);
+  }
+  if (sourceResults > MAX_TOTAL_SOURCE_RESULTS) {
+    throw new Error(`guide requests too much source work (maximum ${MAX_TOTAL_SOURCE_RESULTS} results)`);
+  }
+  return bundle;
 }
 
 /**

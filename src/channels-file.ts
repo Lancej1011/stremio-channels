@@ -1,4 +1,4 @@
-import { renameSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
+import { chmodSync, renameSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { channelsFileSchema, type ChannelDef } from "./config.ts";
 import { logger } from "./log.ts";
 
@@ -20,12 +20,22 @@ export function writeChannelsFile(path: string, channels: ChannelDef[]): void {
   if (existsSync(path)) {
     try {
       copyFileSync(path, `${path}.bak`);
+      restrict(`${path}.bak`);
     } catch (err) {
       log.warn("could not write backup", err);
     }
   }
 
-  writeFileSync(temp, serialized, "utf8");
+  writeFileSync(temp, serialized, { encoding: "utf8", mode: 0o600 });
+  restrict(temp);
   renameSync(temp, path);
   log.info(`wrote ${channels.length} channels to ${path}`);
+}
+
+function restrict(path: string): void {
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // Some removable/shared filesystems do not support Unix permission bits.
+  }
 }

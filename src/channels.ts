@@ -10,7 +10,9 @@ import { urlPrefix } from "./access.ts";
 import { Cinemeta } from "./content/cinemeta.ts";
 import { AddonResolver, type StreamResolver } from "./content/resolver.ts";
 import { TorBoxResolver } from "./content/providers/torbox-resolver.ts";
-import { cooldownRemainingSeconds } from "./content/providers/torbox.ts";
+import { cooldownRemainingSeconds, TorBoxClient } from "./content/providers/torbox.ts";
+import { DebridAgentClient } from "./content/providers/debrid-agent-client.ts";
+import { BudgetedTorBoxApi } from "./content/providers/debrid-budget.ts";
 import { probeSource } from "./content/probe.ts";
 import { fetchSource } from "./content/sources/index.ts";
 import type { Db } from "./db.ts";
@@ -50,7 +52,7 @@ export interface DirectTuneView {
   playback: {
     mode: "direct" | "hls";
     hlsPath: string;
-    reason?: "unsupported-codecs" | "source-unavailable";
+    reason?: "unsupported-codecs" | "source-unavailable" | "remote-direct-disabled";
     directUrl?: string;
     videoCodec: string | null;
     audioCodec: string | null;
@@ -72,6 +74,7 @@ export class ChannelService {
   private readonly generators = new Map<string, ScheduleGenerator>();
   private readonly cinemeta: Cinemeta;
   private readonly resolver: StreamResolver | null;
+  private readonly debridBudget: BudgetedTorBoxApi | null;
   /**
    * When each channel last aired a program to a viewer. Written by `programProvider`,
    * which the supervisor calls at tune-in and at every program boundary, so it records
@@ -88,8 +91,11 @@ export class ChannelService {
     /** Injectable so an integration test can observe what the feed was asked to air. */
     private readonly feedLog = logger("feed"),
   ) {
+    if (!config.persistResolvedUrls) db.scrubResolvedUrls();
     this.cinemeta = new Cinemeta(db);
-    this.resolver = buildResolver(config, db);
+    const built = buildResolver(config, db);
+    this.resolver = built.resolver;
+    this.debridBudget = built.budget;
 
     for (const channel of channels) {
       this.generators.set(
@@ -109,6 +115,10 @@ export class ChannelService {
 
   list(): ChannelDef[] {
     return this.channels;
+  }
+
+  debridBudgetStatus() {
+    return this.debridBudget?.status() ?? null;
   }
 
   /**
@@ -433,7 +443,7 @@ export class ChannelService {
   }
 
   provisioning(channelId: string): {
-    state: "provisioning" | "ready" | "waiting-for-torbox" | "error";
+    state: "provisioning" | "ready" | "waiting-for-torbox" | "waiting-for-budget" | "error";
     scheduledThrough: number | null;
     targetThrough: number;
     progress: number;
@@ -450,6 +460,7 @@ export class ChannelService {
     const progress = Math.min(1, coveredMs / Math.max(1, targetThrough - now));
     const hasCurrent = scheduledThrough !== null && scheduledThrough > now;
     const cooldown = cooldownRemainingSeconds();
+    const budget = this.debridBudget?.status();
 
     if (hasCurrent) {
       return { state: "ready", scheduledThrough, targetThrough, progress, detail: null, active };
@@ -461,6 +472,20 @@ export class ChannelService {
         targetThrough,
         progress,
         detail: `retrying after TorBox cooldown (${cooldown}s)`,
+        active,
+      };
+    }
+    if (budget && (
+      budget.hourlyUsed >= budget.hourlyLimit || budget.dailyUsed >= budget.dailyLimit
+    )) {
+      const hourly = budget.hourlyUsed >= budget.hourlyLimit;
+      const resetAt = hourly ? budget.hourlyResetAt : budget.dailyResetAt;
+      return {
+        state: "waiting-for-budget",
+        scheduledThrough,
+        targetThrough,
+        progress,
+        detail: `debrid operation budget resets at ${new Date(resetAt).toLocaleString()}`,
         active,
       };
     }
@@ -495,7 +520,11 @@ export class ChannelService {
    * never resolver credentials or durable debrid ids, and falls back to our HLS feed
    * when the measured codecs are not broadly direct-playable.
    */
-  async directTune(channelId: string, at = Date.now()): Promise<DirectTuneView | null> {
+  async directTune(
+    channelId: string,
+    at = Date.now(),
+    allowDirect = true,
+  ): Promise<DirectTuneView | null> {
     const channel = this.get(channelId);
     const generator = this.generators.get(channelId);
     if (!channel || !generator) return null;
@@ -507,7 +536,9 @@ export class ChannelService {
     this.lastWatched.set(channelId, at);
     const directUrl = await generator.freshUrl(now.program);
     const probe = this.db.getProbe(now.program.ref_key);
-    const direct = Boolean(directUrl && directPlayable(probe?.video_codec, probe?.audio_codec));
+    const direct = Boolean(
+      allowDirect && directUrl && directPlayable(probe?.video_codec, probe?.audio_codec),
+    );
     const guide = getGuide(this.db, channelId, at, 3);
     const next = guide.find((entry) => entry.program.start_ms > at)?.program;
 
@@ -520,7 +551,13 @@ export class ChannelService {
         mode: direct ? "direct" : "hls",
         hlsPath: `ch/${encodeURIComponent(channelId)}/live.m3u8`,
         ...(!direct
-          ? { reason: directUrl ? "unsupported-codecs" as const : "source-unavailable" as const }
+          ? {
+              reason: !allowDirect
+                ? "remote-direct-disabled" as const
+                : directUrl
+                  ? "unsupported-codecs" as const
+                  : "source-unavailable" as const,
+            }
           : { directUrl: directUrl! }),
         videoCodec: probe?.video_codec ?? null,
         audioCodec: probe?.audio_codec ?? null,
@@ -679,20 +716,41 @@ function directPlayable(videoCodec: string | null | undefined, audioCodec: strin
  * and parsed release names rather than substring matching, and it drops the addon's
  * redirect hop from playback. A pre-configured debrid addon remains the simpler path.
  */
-function buildResolver(config: Config, db: Db): StreamResolver | null {
+function buildResolver(
+  config: Config,
+  db: Db,
+): { resolver: StreamResolver | null; budget: BudgetedTorBoxApi | null } {
+  if (config.debridAgentUrl && config.debridAgentToken) {
+    log.info(`resolving via isolated debrid agent (indexer: ${config.indexerUrl})`);
+    const budget = new BudgetedTorBoxApi(
+      new DebridAgentClient(config.debridAgentUrl, config.debridAgentToken), db, config,
+    );
+    return { resolver: new TorBoxResolver(
+      budget,
+      config.indexerUrl,
+      config,
+      db,
+    ), budget };
+  }
   if (config.torboxApiKey) {
-    log.info(`resolving via TorBox directly (indexer: ${config.indexerUrl})`);
-    return new TorBoxResolver(config.torboxApiKey, config.indexerUrl, config, db);
+    log.warn(`resolving via legacy in-process TorBox key (indexer: ${config.indexerUrl})`);
+    const budget = new BudgetedTorBoxApi(new TorBoxClient(config.torboxApiKey), db, config);
+    return { resolver: new TorBoxResolver(
+      budget,
+      config.indexerUrl,
+      config,
+      db,
+    ), budget };
   }
   if (config.streamAddonUrl) {
     log.info("resolving via configured stream addon");
-    return new AddonResolver(config.streamAddonUrl, config);
+    return { resolver: new AddonResolver(config.streamAddonUrl, config), budget: null };
   }
   log.error(
-    "No resolver configured: channels will have nothing to air. Set torboxApiKey, " +
+    "No resolver configured: channels will have nothing to air. Set debridAgentUrl/token, torboxApiKey, " +
       "or streamAddonUrl pointing at a stream addon that has your debrid key.",
   );
-  return null;
+  return { resolver: null, budget: null };
 }
 
 /** Stands in when nothing is configured, so startup fails loudly but not fatally. */

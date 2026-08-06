@@ -16,7 +16,8 @@ $EDITOR .env
 docker compose up -d
 ```
 
-Set either `TORBOX_API_KEY` or `STREAM_ADDON_URL` when your editor opens. Configuration lives in
+For TorBox, prefer the isolated agent described below. Legacy installations may set
+`TORBOX_API_KEY`; other providers may use `STREAM_ADDON_URL`. Configuration lives in
 `./config`, schedules and caches live in `./data`, and both survive image upgrades.
 The default port binding is loopback-only, and stays that way whatever else you configure:
 the editor is never meant to be published, and a tunnel daemon runs on the host, not in
@@ -28,6 +29,22 @@ Upgrade without touching those volumes:
 docker compose pull
 docker compose up -d
 ```
+
+### Isolated TorBox credential agent
+
+```bash
+mkdir -p secrets
+node -e "require('fs').writeFileSync('secrets/debrid_agent_token', require('crypto').randomBytes(32).toString('base64url'), {mode:0o600})"
+$EDITOR secrets/torbox_api_key
+chmod 600 secrets/torbox_api_key secrets/debrid_agent_token
+docker compose -f compose.yaml -f compose.agent.yaml up -d
+```
+
+The overlay starts a private, authenticated agent with no host port. Only that container
+receives `torbox_api_key`; Headend receives a separate local capability token. Do not also
+set `TORBOX_API_KEY` in `.env`.
+Also protect a populated legacy `.env` with `chmod 600 .env`; Docker Compose does not do
+that automatically.
 
 To build the checked-out source instead, run `docker compose build --pull` followed by
 `docker compose up -d`.
@@ -66,6 +83,7 @@ docker run -d --name channels \
   -v "$PWD/data:/data" -v "$PWD/config:/config" \
   -e STREAM_ADDON_URL="https://torrentio.strem.fun/YOUR-CONFIG/manifest.json" \
   -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  -e ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true \
   ghcr.io/lancej1011/stremio-channels:latest
 ```
 
@@ -85,6 +103,7 @@ docker run -d --name channels \
   -v "$PWD/data:/data" -v "$PWD/config:/config" \
   -e STREAM_ADDON_URL="..." \
   -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  -e ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true \
   ghcr.io/lancej1011/stremio-channels:latest
 ```
 
@@ -101,6 +120,7 @@ docker run -d --name channels \
   -v "$PWD/data:/data" -v "$PWD/config:/config" \
   -e STREAM_ADDON_URL="..." \
   -e PUBLIC_BASE_URL="http://127.0.0.1:7654" \
+  -e ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true \
   ghcr.io/lancej1011/stremio-channels:latest
 ```
 

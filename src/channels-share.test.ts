@@ -54,6 +54,41 @@ describe("share bundles", () => {
       })
     );
   });
+
+  it("caps aggregate title references and automatic-source work", () => {
+    const refs = Array.from({ length: 2000 }, () => ({ type: "movie", id: "tt0111161" }));
+    const oversizedRefs = {
+      kind: SHARE_KIND,
+      version: 1,
+      channels: [{
+        id: "large",
+        name: "Large",
+        pools: Array.from({ length: 6 }, (_, index) => ({
+          id: `pool-${index}`,
+          name: `Pool ${index}`,
+          content: refs,
+        })),
+        defaultPoolIds: ["pool-0"],
+      }],
+    };
+    assert.throws(() => parseBundle(oversizedRefs), /too many title references/);
+
+    const oversizedSources = {
+      kind: SHARE_KIND,
+      version: 1,
+      channels: [{
+        id: "sources",
+        name: "Sources",
+        pools: Array.from({ length: 11 }, (_, index) => ({
+          id: `pool-${index}`,
+          name: `Pool ${index}`,
+          source: { kind: "rule", type: "movie", limit: 500 },
+        })),
+        defaultPoolIds: ["pool-0"],
+      }],
+    };
+    assert.throws(() => parseBundle(oversizedSources), /too much source work/);
+  });
 });
 
 describe("merging an imported guide", () => {

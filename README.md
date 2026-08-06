@@ -51,9 +51,15 @@ time, not of a process staying alive.
 Debrid is not optional. Programs must be seekable HTTPS files for the feed to join one
 partway through; raw torrents cannot do that.
 
-There are two ways to resolve programs:
+There are three ways to resolve programs:
 
-**Direct TorBox** (`torboxApiKey`) — recommended if you use TorBox. Picks releases on
+**Isolated debrid agent** (`debridAgentUrl` and `debridAgentToken`) — recommended for
+TorBox. The agent is a small separate process that alone receives the provider API key;
+Headend holds only a narrowly scoped local-agent token. It preserves the same release
+selection while keeping the TorBox credential out of the main server, database, config,
+diagnostics and crash logs.
+
+**Legacy direct TorBox** (`torboxApiKey`) — supported for compatibility. Picks releases on
 real byte sizes and parsed release names, extracts the right episode from season packs,
 and drops the addon redirect from playback. Torrent hashes come from a plain indexer
 addon (`indexerUrl`, default Torrentio), because TorBox has no search of its own.
@@ -63,7 +69,9 @@ it at a Torrentio/Comet/MediaFusion install URL that already has your debrid key
 this server just uses whatever links it returns. Simpler, and your API key stays out of
 this server's config.
 
-If both are set, TorBox wins.
+The isolated agent takes precedence, followed by legacy direct TorBox, then the configured
+stream addon. Signed provider URLs are never returned to remote Headend viewers by default;
+they receive the server's HLS feed instead.
 
 ## Setup
 
@@ -79,8 +87,8 @@ $EDITOR .env
 docker compose up -d
 ```
 
-Set either `TORBOX_API_KEY` or `STREAM_ADDON_URL` when your editor opens, then start the
-container. Open
+For the recommended isolated TorBox setup, see [Isolated debrid agent](#isolated-debrid-agent).
+For a quick legacy setup, set `TORBOX_API_KEY` or `STREAM_ADDON_URL` in `.env`. Open
 <http://127.0.0.1:7654/ui>, then install
 `http://127.0.0.1:7654/manifest.json` in Stremio. See [DOCKER.md](DOCKER.md) for
 NVENC, QuickSync/VAAPI, upgrades, and private HTTPS access.
@@ -126,6 +134,36 @@ Start it:
 ```bash
 npm start
 ```
+
+### Isolated debrid agent
+
+The recommended TorBox deployment runs the credential-bearing API client separately from
+Headend. Generate a broker token and place both secrets in files readable only by their
+owner:
+
+```bash
+mkdir -p secrets
+node -e "require('fs').writeFileSync('secrets/debrid_agent_token', require('crypto').randomBytes(32).toString('base64url'), {mode:0o600})"
+$EDITOR secrets/torbox_api_key
+chmod 600 secrets/torbox_api_key secrets/debrid_agent_token
+docker compose -f compose.yaml -f compose.agent.yaml up -d
+```
+
+The agent has no published port. Compose mounts the TorBox key only into the agent; the
+main container receives the separate broker token. Remove `TORBOX_API_KEY` from `.env`
+when using this mode.
+
+For a native installation, start the agent under a separate OS account where possible:
+
+```bash
+TORBOX_API_KEY_FILE=/private/torbox_api_key \
+DEBRID_AGENT_TOKEN_FILE=/private/debrid_agent_token \
+npm exec stremio-channels-debrid-agent
+```
+
+Then configure Headend with `DEBRID_AGENT_URL=http://127.0.0.1:7665` and the same
+`DEBRID_AGENT_TOKEN_FILE`. The broker token permits use of the local agent but cannot be
+used to sign in to TorBox or call TorBox directly.
 
 For an always-on native install cloned at `~/stremio-channels`, copy
 `deploy/stremio-channels.service` to `~/.config/systemd/user/`, then run
@@ -280,15 +318,15 @@ network programmed its day:
 
 | Preset | Shape |
 | --- | --- |
-| Boomerang Classics | Scooby mysteries, Hanna-Barbera afternoons and late-night action |
-| Cartoon Network Classics & Hits | Cartoon Cartoons mornings, afternoon action, modern prime time |
-| Nick at Nite / classic sitcoms | Retro mornings, 90s staples weighted into prime time |
-| Adult Swim | Adult animation, weighted heavily to the small hours |
+| Cartoon Time Capsule | Mystery cartoons, classic afternoons and late-night action |
+| Animation Eras | Classic mornings, afternoon action, modern prime time |
+| Classic Sitcom Nights | Retro mornings, 90s staples weighted into prime time |
+| After Dark Animation | Adult animation, weighted heavily to the small hours |
 | Sci-Fi channel | Anthology mornings, serialised prime time, overnight X-Files |
-| Disney | The classic animated afternoon, modern Disney in the evening |
-| Comedy Central | Daytime comedy, the raunchier material kept after 22:00 |
-| Nicktoons | 90s Nick animation split into morning, afternoon and late blocks |
-| Fox 5 Morning | School-morning cartoons and syndicated action throwbacks |
+| Animated Adventures | Classic animated afternoons and modern adventures in the evening |
+| Comedy Channel | Daytime comedy, the raunchier material kept after 22:00 |
+| 90s Animation | 90s cartoons split into morning, afternoon and late blocks |
+| School-Morning Throwback | School-morning cartoons and syndicated action throwbacks |
 
 Applying a preset copies it into your channels. It stays fully editable and never changes
 on its own. A preset whose channel id already exists is marked **Already represented**;
@@ -321,7 +359,9 @@ curl -s localhost:7654/api/channels/export?ids=scifi,sitcoms > guide.json
 
 **Import** from the same view, either by pasting the guide or by linking to one someone
 published — a raw gist URL, not a web page. **Preview** shows exactly what would change
-without writing anything. Three collision modes decide what happens when an id already
+without writing anything. Import stays disabled until that exact preview is confirmed; a
+changed remote file, collision mode, or local lineup requires a new preview. Three collision
+modes decide what happens when an id already
 exists:
 
 | Mode | Behaviour |
@@ -332,6 +372,22 @@ exists:
 
 `add` is all-or-nothing: one collision means nothing is written, so a guide can never
 half-apply.
+
+Remote guide fetches are HTTPS-only and cannot connect to loopback, private, link-local,
+reserved, or cloud-metadata addresses. Redirects are checked one at a time and each request
+is pinned to the DNS answer that passed validation. If you deliberately host guides on a
+trusted LAN, set `allowPrivateGuideImports` to `true`; this also permits plain HTTP only for
+those private destinations. Imported channel poster URLs are removed by default so an
+author cannot use them as tracking pixels. `allowImportedGuideArtwork` opts back in.
+Automatic sources in an imported guide are also rejected by default: they could spend your
+MDBList/TMDB/Trakt quotas or query your Stremio library using local credentials. Prefer a
+guide containing explicit IMDb title IDs; `allowImportedGuideSources` is the explicit opt-in.
+
+Imports are capped at 200 channels, 10,000 explicit/excluded title references, and 5,000
+requested source results in total. A guide is always untrusted programming data: previewing
+does not contact the debrid provider or verify availability. After explicit confirmation,
+the normal channel warm-up may begin catalogue and debrid resolution for changed channels.
+Importing establishes no affiliation with the guide author.
 
 Both endpoints are part of the editor surface, so they answer only on loopback and to hosts
 named in `trustedHosts` — never through a tunnel, with or without an access token. A LAN
@@ -493,8 +549,15 @@ or both.
 
 Everything in `config.json` can also be set by environment variable, which wins over the
 file: `PORT`, `HOST`, `PUBLIC_BASE_URL`, `ACCESS_TOKEN`, `TRUSTED_HOSTS`, `DATA_DIR`,
-`CHANNELS_FILE`, `STREAM_ADDON_URL`, `TMDB_API_TOKEN`, `TMDB_API_KEY`, `ENCODER`,
+`CHANNELS_FILE`, `DEBRID_AGENT_URL`, `DEBRID_AGENT_TOKEN`, `STREAM_ADDON_URL`,
+`TMDB_API_TOKEN`, `TMDB_API_KEY`, `ALLOW_PRIVATE_GUIDE_IMPORTS`,
+`ALLOW_IMPORTED_GUIDE_ARTWORK`, `ALLOW_IMPORTED_GUIDE_SOURCES`,
+`AUTH_FAILURE_LIMIT`, `TUNE_REQUEST_LIMIT_PER_MINUTE`,
+`DEBRID_HOURLY_OPERATION_LIMIT`, `DEBRID_DAILY_OPERATION_LIMIT`, `ENCODER`,
 `LOG_LEVEL`.
+
+`DEBRID_AGENT_TOKEN`, `TORBOX_API_KEY` and their agent-process equivalents also accept a
+`_FILE` suffix. Mounted secret files are preferred over environment variables.
 
 Useful knobs:
 
@@ -502,6 +565,17 @@ Useful knobs:
 | --- | --- | --- |
 | `accessToken` | — | Secret first path segment required of remote clients. Unset means no authentication at all |
 | `trustedHosts` | `[]` | Host header values besides loopback allowed to reach the editor, as `192.168.1.58:7654` |
+| `allowUnauthenticatedNonLoopback` | `false` | Explicit trusted-LAN/container exception to fail-closed binding |
+| `debridAgentUrl` | — | URL of the private credential broker; configure together with its token |
+| `remoteDirectPlay` | `false` | Permit remote clients to receive signed provider URLs; leave disabled |
+| `persistResolvedUrls` | `false` | Store signed provider URLs in SQLite; leave disabled |
+| `allowPrivateGuideImports` | `false` | Permit remote guide fetches from private/LAN destinations |
+| `allowImportedGuideArtwork` | `false` | Preserve external poster URLs from imported guides |
+| `allowImportedGuideSources` | `false` | Let imported automatic sources use local catalogue credentials |
+| `authFailureLimit` | `20` | Failed remote token attempts allowed per client in the configured five-minute window |
+| `tuneRequestLimitPerMinute` | `30` | Remote tune/session-allocating requests allowed per client each minute |
+| `debridHourlyOperationLimit` | `120` | Persisted hourly TorBox operation ceiling |
+| `debridDailyOperationLimit` | `1000` | Persisted UTC-day TorBox operation ceiling |
 | `video.bitrate` | `6000k` | Output bitrate per channel |
 | `hls.segmentSeconds` | `2` | Encoders run at real time, so this sets how long tuning in takes |
 | `idleShutdownSeconds` | `120` | How long a feed survives with nobody watching |
@@ -613,5 +687,16 @@ Stremio Channels does not include media, debrid credentials, or a hosted service
 operator is responsible for the content they access and for complying with applicable
 law and the terms of their metadata, indexer, addon, and debrid providers.
 
+This is an independent, unofficial project and is not affiliated with or endorsed by
+Stremio, TorBox, any television network, studio or streaming service. Bundled presets use
+generic names and describe programming styles rather than branded channels.
+
+Operation necessarily sends title identifiers to configured metadata/indexer services and
+torrent hashes, file identifiers and download requests to the operator's configured debrid
+provider. Viewing devices receive guide metadata and, for local direct play only, a
+short-lived signed download URL. Artwork hosts can observe ordinary image requests. No
+telemetry or central Headend service is included.
+
 Released under the [MIT License](LICENSE). Security reports should follow
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Maintainer release and artifact-verification procedures are in
+[RELEASING.md](RELEASING.md).

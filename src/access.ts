@@ -21,6 +21,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { FastifyReply, FastifyRequest, onRequestHookHandler } from "fastify";
 import type { Config } from "./config.ts";
+import { ClientRateLimiter, clientKey } from "./request-limits.ts";
 
 /**
  * Paths a remote client may reach once it has presented the token. An allowlist rather
@@ -66,8 +67,12 @@ const FORWARDED_HEADERS = [
 
 /** Set on the raw request by `rewriteUrl` and read back by the guard a moment later. */
 const TOKEN_PRESENTED = Symbol("stremio-channels.tokenPresented");
+const AUTH_LIMITED = Symbol("stremio-channels.authLimited");
 
-type MarkedRequest = IncomingMessage & { [TOKEN_PRESENTED]?: boolean };
+type MarkedRequest = IncomingMessage & {
+  [TOKEN_PRESENTED]?: boolean;
+  [AUTH_LIMITED]?: boolean;
+};
 
 export interface AccessControl {
   /**
@@ -77,8 +82,12 @@ export interface AccessControl {
   rewriteUrl?: (req: IncomingMessage) => string;
   /** Registered as the first `onRequest` hook. */
   guard: onRequestHookHandler;
+  /** Limits remote requests that can allocate playback or trigger resolution work. */
+  throttle: onRequestHookHandler;
   /** Whether a path should carry the permissive CORS headers. */
   corsAllowed: (url: string) => boolean;
+  /** True only for loopback or an explicitly trusted, unproxied request. */
+  isLocalRequest: (req: FastifyRequest) => boolean;
 }
 
 /** The path segment carrying the token, or "" when there is none. */
@@ -98,12 +107,35 @@ export function redactToken(config: Config, text: string): string {
 export function createAccessControl(config: Config): AccessControl {
   const token = config.accessToken;
   const trusted = new Set(config.trustedHosts.map((host) => host.trim().toLowerCase()));
+  const authFailures = new ClientRateLimiter(
+    config.authFailureLimit,
+    config.authFailureWindowSeconds * 1000,
+    config.authBlockSeconds * 1000,
+  );
+  const tuneRequests = new ClientRateLimiter(
+    config.tuneRequestLimitPerMinute,
+    60_000,
+    60_000,
+  );
+
+  const throttle: onRequestHookHandler = async (req, reply) => {
+    if (isLocal(req.raw, trusted) || !expensiveRemotePath(req.url)) return;
+    const result = tuneRequests.hit(clientKey(req.raw));
+    if (result.allowed) return;
+    return reply
+      .code(429)
+      .header("Retry-After", String(result.retryAfterSeconds))
+      .header("Cache-Control", "no-store")
+      .send({ error: "too many tune requests" });
+  };
 
   if (!token) {
     return {
       rewriteUrl: undefined,
       guard: async () => {},
+      throttle,
       corsAllowed,
+      isLocalRequest: (req) => isLocal(req.raw, trusted),
     };
   }
 
@@ -116,7 +148,13 @@ export function createAccessControl(config: Config): AccessControl {
     rewriteUrl(req) {
       try {
         const { url, matched } = stripToken(req.url ?? "/", expected);
-        if (matched) (req as MarkedRequest)[TOKEN_PRESENTED] = true;
+        if (matched) {
+          (req as MarkedRequest)[TOKEN_PRESENTED] = true;
+          authFailures.reset(clientKey(req));
+        } else if (!isLocal(req, trusted)) {
+          const result = authFailures.hit(clientKey(req));
+          if (!result.allowed) (req as MarkedRequest)[AUTH_LIMITED] = true;
+        }
         return url;
       } catch {
         // rewriteUrl must return a string or Fastify destroys the socket, so a bug here
@@ -127,11 +165,21 @@ export function createAccessControl(config: Config): AccessControl {
 
     async guard(req: FastifyRequest, reply: FastifyReply) {
       if (isLocal(req.raw, trusted)) return;
-      if ((req.raw as MarkedRequest)[TOKEN_PRESENTED] !== true) return deny(reply);
+      if ((req.raw as MarkedRequest)[TOKEN_PRESENTED] !== true) {
+        if ((req.raw as MarkedRequest)[AUTH_LIMITED]) {
+          // Make sustained guessing pay a connection and latency cost while preserving
+          // the same opaque 404 response as an ordinary miss.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          reply.header("Connection", "close");
+        }
+        return deny(reply);
+      }
       if (!REMOTE_METHODS.has(req.method) || !remoteAllowed(req.url)) return deny(reply);
     },
 
+    throttle,
     corsAllowed,
+    isLocalRequest: (req) => isLocal(req.raw, trusted),
   };
 }
 
@@ -218,6 +266,12 @@ function remoteAllowed(url: string): boolean {
   const path = pathOf(url);
   if (REMOTE_EXACT.has(path)) return true;
   return REMOTE_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function expensiveRemotePath(url: string): boolean {
+  const path = pathOf(url);
+  return path.startsWith("/stream/") || path.startsWith("/viewer/tune/") ||
+    /^\/ch\/[^/]+\/live\.m3u8$/.test(path);
 }
 
 /**

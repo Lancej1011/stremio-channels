@@ -7,6 +7,7 @@ import type {
   FailoverResolver,
   PreparedStream,
   RefreshableResolver,
+  ResolvedStream,
   StreamResolver,
 } from "../content/resolver.ts";
 import type { Db, ProgramRow } from "../db.ts";
@@ -149,6 +150,8 @@ function guard<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export class ScheduleGenerator {
+  /** Signed provider links are capabilities; keep them off disk by default. */
+  private readonly ephemeralUrls = new Map<string, { url: string; expiresAt: number }>();
   private readonly log: Logger;
   private readonly poolCache = new Map<string, ContentRef[]>();
   private loggedPool = false;
@@ -527,6 +530,11 @@ export class ScheduleGenerator {
         pending.commit(selection.bumps);
 
         const row = { ...item, start_ms: cursor };
+        if (!this.config.persistResolvedUrls && row.resolved_url && row.url_expires_at) {
+          this.rememberUrl(row, row.resolved_url, row.url_expires_at);
+          row.resolved_url = null;
+          row.url_expires_at = null;
+        }
         this.db.insertPrograms([row]);
         this.db.recordAiring(this.channel.id, row.ref_key, row.start_ms);
         cursor += row.duration_ms;
@@ -611,6 +619,10 @@ export class ScheduleGenerator {
 
   /** Re-resolves a link that has expired since generation. Debrid URLs are short lived. */
   async freshUrl(program: ProgramRow): Promise<string | null> {
+    const memory = this.ephemeralUrls.get(this.urlKey(program));
+    if (memory && memory.expiresAt > Date.now()) return memory.url;
+    if (memory) this.ephemeralUrls.delete(this.urlKey(program));
+
     const stillValid =
       program.resolved_url &&
       program.url_expires_at &&
@@ -622,7 +634,7 @@ export class ScheduleGenerator {
     if (program.torrent_id !== null && program.file_id !== null && isRefreshable(this.resolver)) {
       const renewed = await this.resolver.refresh(program.torrent_id, program.file_id);
       if (renewed) {
-        this.db.setResolved(program.id, renewed.url, renewed.expiresAt);
+        this.saveUrl(program, renewed);
         return renewed.url;
       }
       this.log.debug(`cheap refresh failed for "${program.title}", falling back`);
@@ -635,13 +647,7 @@ export class ScheduleGenerator {
     const stream = await this.resolver.resolve(ref);
     if (!stream) return program.resolved_url;
 
-    this.db.setResolved(
-      program.id,
-      stream.url,
-      stream.expiresAt,
-      stream.torrentId ?? null,
-      stream.fileId ?? null,
-    );
+    this.saveUrl(program, stream);
     return stream.url;
   }
 
@@ -652,8 +658,60 @@ export class ScheduleGenerator {
    */
   invalidateUrl(program: ProgramRow): void {
     const ref = this.poolRefFor(program.ref_key);
-    if (ref && isFailover(this.resolver)) this.resolver.invalidate(ref, program.resolved_url ?? undefined);
+    const memory = this.ephemeralUrls.get(this.urlKey(program));
+    if (ref && isFailover(this.resolver)) {
+      this.resolver.invalidate(ref, memory?.url ?? program.resolved_url ?? undefined);
+    }
+    this.ephemeralUrls.delete(this.urlKey(program));
     this.db.clearResolved(program.id);
+  }
+
+  private saveUrl(
+    program: Pick<ProgramRow, "id" | "channel_id" | "start_ms" | "ref_key">,
+    stream: ResolvedStream,
+  ): void {
+    if (this.config.persistResolvedUrls) {
+      this.db.setResolved(
+        program.id,
+        stream.url,
+        stream.expiresAt,
+        stream.torrentId ?? null,
+        stream.fileId ?? null,
+      );
+      return;
+    }
+    // Persist only durable identifiers; neither one grants media access without the agent.
+    this.db.setResolved(
+      program.id,
+      null,
+      null,
+      stream.torrentId ?? null,
+      stream.fileId ?? null,
+    );
+    this.rememberUrl(program, stream.url, stream.expiresAt);
+  }
+
+  private rememberUrl(
+    program: Pick<ProgramRow, "channel_id" | "start_ms" | "ref_key">,
+    url: string,
+    expiresAt: number,
+  ): void {
+    const now = Date.now();
+    if (this.ephemeralUrls.size >= 500) {
+      for (const [key, value] of this.ephemeralUrls) {
+        if (value.expiresAt <= now) this.ephemeralUrls.delete(key);
+      }
+      while (this.ephemeralUrls.size >= 500) {
+        const oldest = this.ephemeralUrls.keys().next().value as string | undefined;
+        if (!oldest) break;
+        this.ephemeralUrls.delete(oldest);
+      }
+    }
+    this.ephemeralUrls.set(this.urlKey(program), { url, expiresAt });
+  }
+
+  private urlKey(program: Pick<ProgramRow, "channel_id" | "start_ms" | "ref_key">): string {
+    return `${program.channel_id}:${program.start_ms}:${program.ref_key}`;
   }
 
   /**

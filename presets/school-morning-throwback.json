@@ -1,11 +1,12 @@
 {
-  "key": "fox5-morning",
-  "label": "Fox 5 Morning Throwback",
-  "summary": "Fox Kids, syndicated cartoons, action shows and school-morning favorites in familiar blocks.",
+  "key": "school-morning-throwback",
+  "label": "School-Morning Throwback",
+  "summary": "Syndicated cartoons, action shows and school-morning favorites in familiar blocks.",
+  "legacyIds": ["fox5-morning"],
   "channel": {
-    "id": "fox5-morning",
-    "name": "Fox 5 Morning Throwback",
-    "description": "A local-TV-style mix of Fox Kids cartoons, syndicated action, and school-morning favorites.",
+    "id": "school-morning-throwback",
+    "name": "School-Morning Throwback",
+    "description": "A local-TV-style mix of cartoons, syndicated action and school-morning favorites.",
     "strategy": "sequential",
     "seed": 1992,
     "content": [],
