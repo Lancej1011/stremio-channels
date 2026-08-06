@@ -2357,9 +2357,9 @@ $("#preview-play").addEventListener("click", startPreview);
 
 function startPreview() {
   const id = $("#preview-channel").value;
-  if (!id) return toast("Pick a channel first", true);
+  if (!id || !ID_RE.test(id)) return toast("Pick a valid channel first", true);
   const video = $("#preview");
-  const src = `/ch/${id}/live.m3u8`;
+  const src = `/ch/${encodeURIComponent(id)}/live.m3u8`;
   stopPreview();
   $("#preview-placeholder").hidden = true;
   video.hidden = false;

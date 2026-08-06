@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import Fastify, { type FastifyReply } from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +48,12 @@ const access = createAccessControl(config);
 // `rewriteUrl` runs before routing, so the token prefix is gone by the time any route,
 // hook or playlist-relative URL below sees the request.
 const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, rewriteUrl: access.rewriteUrl });
+await app.register(rateLimit, {
+  global: true,
+  max: 1_200,
+  timeWindow: "1 minute",
+  allowList: (req) => access.isLocalRequest(req),
+});
 
 /**
  * Opt-in request log, for working out what a remote client is really asking for when it
@@ -351,36 +358,52 @@ app.get("/ui/hls.js", async (_req, reply) => {
 
 const viewerDir = join(dirname(fileURLToPath(import.meta.url)), "viewer");
 
-app.get("/watch", async (_req, reply) => {
-  reply
-    .header("Content-Type", "text/html; charset=utf-8")
-    .header("Cache-Control", "no-store");
-  return createReadStream(join(viewerDir, "index.html"));
-});
+app.get(
+  "/watch",
+  { config: { rateLimit: { max: 1_200, timeWindow: "1 minute" } } },
+  async (_req, reply) => {
+    reply
+      .header("Content-Type", "text/html; charset=utf-8")
+      .header("Cache-Control", "no-store");
+    return createReadStream(join(viewerDir, "index.html"));
+  },
+);
 
-app.get("/watch/hls.js", async (_req, reply) => {
-  const candidates = [
-    join(process.cwd(), "node_modules/hls.js/dist/hls.min.js"),
-    join(viewerDir, "..", "..", "node_modules/hls.js/dist/hls.min.js"),
-  ];
-  const found = candidates.find((p) => existsSync(p));
-  if (!found) return reply.code(404).send("hls.js not installed");
-  reply.header("Content-Type", "text/javascript").header("Cache-Control", "max-age=86400");
-  return createReadStream(found);
-});
+app.get(
+  "/watch/hls.js",
+  { config: { rateLimit: { max: 1_200, timeWindow: "1 minute" } } },
+  async (_req, reply) => {
+    const candidates = [
+      join(process.cwd(), "node_modules/hls.js/dist/hls.min.js"),
+      join(viewerDir, "..", "..", "node_modules/hls.js/dist/hls.min.js"),
+    ];
+    const found = candidates.find((p) => existsSync(p));
+    if (!found) return reply.code(404).send("hls.js not installed");
+    reply.header("Content-Type", "text/javascript").header("Cache-Control", "max-age=86400");
+    return createReadStream(found);
+  },
+);
 
-app.get("/watch/sw.js", async (_req, reply) => {
-  reply
-    .header("Content-Type", "text/javascript; charset=utf-8")
-    .header("Cache-Control", "no-cache")
-    .header("Service-Worker-Allowed", `${urlPrefix(config)}/watch`);
-  return createReadStream(join(viewerDir, "sw.js"));
-});
+app.get(
+  "/watch/sw.js",
+  { config: { rateLimit: { max: 1_200, timeWindow: "1 minute" } } },
+  async (_req, reply) => {
+    reply
+      .header("Content-Type", "text/javascript; charset=utf-8")
+      .header("Cache-Control", "no-cache")
+      .header("Service-Worker-Allowed", `${urlPrefix(config)}/watch`);
+    return createReadStream(join(viewerDir, "sw.js"));
+  },
+);
 
-app.get("/watch/icon.svg", async (_req, reply) => {
-  reply.header("Content-Type", "image/svg+xml").header("Cache-Control", "max-age=86400");
-  return createReadStream(join(viewerDir, "icon.svg"));
-});
+app.get(
+  "/watch/icon.svg",
+  { config: { rateLimit: { max: 1_200, timeWindow: "1 minute" } } },
+  async (_req, reply) => {
+    reply.header("Content-Type", "image/svg+xml").header("Cache-Control", "max-age=86400");
+    return createReadStream(join(viewerDir, "icon.svg"));
+  },
+);
 
 app.get("/watch/manifest.webmanifest", async (_req, reply) => {
   const prefix = urlPrefix(config);

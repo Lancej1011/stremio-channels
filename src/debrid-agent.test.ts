@@ -32,7 +32,7 @@ describe("isolated debrid agent", () => {
   });
 
   it("discloses no route or credential without its local capability token", async () => {
-    const app = buildDebridAgent("provider-secret", AGENT_TOKEN);
+    const app = await buildDebridAgent("provider-secret", AGENT_TOKEN);
     for (const authorization of [undefined, "Bearer wrong_token_0123456789abcdef"]) {
       const res = await app.inject({
         method: "POST",
@@ -58,7 +58,7 @@ describe("isolated debrid agent", () => {
         data: [{ hash: HASH, name: "release", size: 123, files: [] }],
       }), { headers: { "content-type": "application/json" } });
     };
-    const app = buildDebridAgent("provider-secret", AGENT_TOKEN);
+    const app = await buildDebridAgent("provider-secret", AGENT_TOKEN);
     const res = await app.inject({
       method: "POST",
       url: "/v1/check-cached",
@@ -76,7 +76,7 @@ describe("isolated debrid agent", () => {
   it("rejects oversized work before making a provider request", async () => {
     let called = false;
     globalThis.fetch = async () => { called = true; throw new Error("should not run"); };
-    const app = buildDebridAgent("provider-secret", AGENT_TOKEN);
+    const app = await buildDebridAgent("provider-secret", AGENT_TOKEN);
     const res = await app.inject({
       method: "POST",
       url: "/v1/check-cached",
@@ -85,6 +85,22 @@ describe("isolated debrid agent", () => {
     });
     assert.equal(res.statusCode, 400);
     assert.equal(called, false);
+    await app.close();
+  });
+
+  it("rate-limits authenticated provider operations", async () => {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      success: true,
+      data: { plan: 1 },
+    }), { headers: { "content-type": "application/json" } });
+    const app = await buildDebridAgent("provider-secret", AGENT_TOKEN, 2);
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({ method: "POST", url: "/v1/verify", headers: AUTH });
+      assert.equal(res.statusCode, 200);
+    }
+    const limited = await app.inject({ method: "POST", url: "/v1/verify", headers: AUTH });
+    assert.equal(limited.statusCode, 429);
+    assert.ok(Number(limited.headers["retry-after"]) > 0);
     await app.close();
   });
 });

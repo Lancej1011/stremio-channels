@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import { logger, setRedaction } from "./log.ts";
 import { secretFromEnv } from "./secrets.ts";
@@ -24,11 +25,20 @@ function deny(reply: FastifyReply) {
 }
 
 /** Builds the broker without binding a socket, so its complete boundary can be tested. */
-export function buildDebridAgent(apiKey: string, agentToken: string) {
+export async function buildDebridAgent(
+  apiKey: string,
+  agentToken: string,
+  operationLimitPerMinute = 300,
+) {
   if (agentToken.length < 24) throw new Error("DEBRID_AGENT_TOKEN must be at least 24 characters");
   const expected = createHash("sha256").update(agentToken).digest();
   const torbox = new TorBoxClient(apiKey);
   const app = Fastify({ logger: false, bodyLimit: 256 * 1024 });
+  await app.register(rateLimit, {
+    global: true,
+    max: operationLimitPerMinute,
+    timeWindow: "1 minute",
+  });
   const authFailures = new ClientRateLimiter(20, 5 * 60_000, 15 * 60_000, 1_000);
 
   app.addHook("onRequest", async (req, reply) => {
@@ -79,6 +89,12 @@ export function buildDebridAgent(apiKey: string, agentToken: string) {
   });
 
   app.setErrorHandler((err, _req, reply) => {
+    const statusCode = typeof err === "object" && err !== null && "statusCode" in err
+      ? (err as { statusCode?: unknown }).statusCode
+      : undefined;
+    if (statusCode === 429) {
+      return reply.code(429).send({ error: "too many provider requests" });
+    }
     log.error("provider request failed", err);
     return reply.code(502).send({ error: "provider request failed" });
   });
@@ -98,7 +114,7 @@ async function main(): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("DEBRID_AGENT_PORT must be a valid TCP port");
   }
-  const app = buildDebridAgent(apiKey, token);
+  const app = await buildDebridAgent(apiKey, token);
   await app.listen({ host, port });
   log.info(`listening on ${host}:${port}`);
 }

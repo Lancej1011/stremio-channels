@@ -252,6 +252,9 @@ export class TorBoxClient implements TorBoxApi {
           const route = path.split("?")[0] ?? path;
           requestCounts.set(route, (requestCounts.get(route) ?? 0) + 1);
 
+          // The API key may come from a secret file and is intentionally transmitted only
+          // to TorBox's fixed HTTPS origin. Neither the origin nor this header name is input.
+          // codeql[js/file-access-to-http]
           const res = await fetch(`${API}/${path}`, {
             ...init,
             headers: { Authorization: `Bearer ${this.apiKey}`, ...(init.headers ?? {}) },
