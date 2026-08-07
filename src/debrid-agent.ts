@@ -41,6 +41,8 @@ export async function buildDebridAgent(
   });
   const authFailures = new ClientRateLimiter(20, 5 * 60_000, 15 * 60_000, 1_000);
 
+  // The registered Fastify limiter runs before this authentication hook.
+  // lgtm[js/missing-rate-limiting]
   app.addHook("onRequest", async (req, reply) => {
     const key = clientKey(req.raw);
     if (authorized(req, expected)) {
@@ -55,38 +57,58 @@ export async function buildDebridAgent(
     return deny(reply);
   });
 
-  app.post("/v1/verify", async () => ({ ok: await torbox.verify() }));
+  app.post(
+    "/v1/verify",
+    { config: { rateLimit: { max: operationLimitPerMinute, timeWindow: "1 minute" } } },
+    async () => ({ ok: await torbox.verify() }),
+  );
 
-  app.post<{ Body: unknown }>("/v1/check-cached", async (req, reply) => {
-    const parsed = z.object({
-      hashes: z.array(hashSchema).min(1).max(100),
-      withFiles: z.boolean().default(true),
-    }).safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    const found = await torbox.checkCached(parsed.data.hashes, parsed.data.withFiles);
-    return { torrents: [...found.values()] };
-  });
+  app.post<{ Body: unknown }>(
+    "/v1/check-cached",
+    { config: { rateLimit: { max: operationLimitPerMinute, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const parsed = z.object({
+        hashes: z.array(hashSchema).min(1).max(100),
+        withFiles: z.boolean().default(true),
+      }).safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+      const found = await torbox.checkCached(parsed.data.hashes, parsed.data.withFiles);
+      return { torrents: [...found.values()] };
+    },
+  );
 
-  app.post<{ Body: unknown }>("/v1/add-magnet", async (req, reply) => {
-    const parsed = z.object({ hash: hashSchema }).safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    return { torrentId: await torbox.addMagnet(parsed.data.hash) };
-  });
+  app.post<{ Body: unknown }>(
+    "/v1/add-magnet",
+    { config: { rateLimit: { max: operationLimitPerMinute, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const parsed = z.object({ hash: hashSchema }).safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+      return { torrentId: await torbox.addMagnet(parsed.data.hash) };
+    },
+  );
 
-  app.post<{ Body: unknown }>("/v1/torrent-files", async (req, reply) => {
-    const parsed = z.object({ torrentId: z.number().int().positive() }).safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    return { files: await torbox.torrentFiles(parsed.data.torrentId) };
-  });
+  app.post<{ Body: unknown }>(
+    "/v1/torrent-files",
+    { config: { rateLimit: { max: operationLimitPerMinute, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const parsed = z.object({ torrentId: z.number().int().positive() }).safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+      return { files: await torbox.torrentFiles(parsed.data.torrentId) };
+    },
+  );
 
-  app.post<{ Body: unknown }>("/v1/download-link", async (req, reply) => {
-    const parsed = z.object({
-      torrentId: z.number().int().positive(),
-      fileId: z.number().int().nonnegative(),
-    }).safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
-    return { url: await torbox.downloadLink(parsed.data.torrentId, parsed.data.fileId) };
-  });
+  app.post<{ Body: unknown }>(
+    "/v1/download-link",
+    { config: { rateLimit: { max: operationLimitPerMinute, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const parsed = z.object({
+        torrentId: z.number().int().positive(),
+        fileId: z.number().int().nonnegative(),
+      }).safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid request" });
+      return { url: await torbox.downloadLink(parsed.data.torrentId, parsed.data.fileId) };
+    },
+  );
 
   app.setErrorHandler((err, _req, reply) => {
     const statusCode = typeof err === "object" && err !== null && "statusCode" in err

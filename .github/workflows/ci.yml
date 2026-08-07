@@ -53,11 +53,13 @@ jobs:
           cp channels.example.json "$RUNNER_TEMP/channels-config/channels.json"
           docker run -d --name stremio-channels-ci \
             -p 127.0.0.1:7654:7654 \
+            -e ACCESS_TOKEN=ci_smoke_token_0123456789abcdef \
             -v "$RUNNER_TEMP/channels-config:/config" \
             -v "$RUNNER_TEMP/channels-data:/data" \
             stremio-channels:ci
           for _ in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:7654/health >/dev/null; then
+            if curl --fail --silent \
+              http://127.0.0.1:7654/ci_smoke_token_0123456789abcdef/health >/dev/null; then
               exit 0
             fi
             sleep 1

@@ -254,9 +254,10 @@ export class TorBoxClient implements TorBoxApi {
 
           // The API key may come from a secret file and is intentionally transmitted only
           // to TorBox's fixed HTTPS origin. Neither the origin nor this header name is input.
-          // codeql[js/file-access-to-http]
+          // lgtm[js/file-access-to-http]
           const res = await fetch(`${API}/${path}`, {
             ...init,
+            // lgtm[js/file-access-to-http]
             headers: { Authorization: `Bearer ${this.apiKey}`, ...(init.headers ?? {}) },
             signal: AbortSignal.timeout(timeoutMs),
           });
