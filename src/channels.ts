@@ -6,10 +6,13 @@ import {
   type Config,
   type ContentRef,
 } from "./config.ts";
+import { urlPrefix } from "./access.ts";
 import { Cinemeta } from "./content/cinemeta.ts";
 import { AddonResolver, type StreamResolver } from "./content/resolver.ts";
 import { TorBoxResolver } from "./content/providers/torbox-resolver.ts";
-import { cooldownRemainingSeconds } from "./content/providers/torbox.ts";
+import { cooldownRemainingSeconds, TorBoxClient } from "./content/providers/torbox.ts";
+import { DebridAgentClient } from "./content/providers/debrid-agent-client.ts";
+import { BudgetedTorBoxApi } from "./content/providers/debrid-budget.ts";
 import { probeSource } from "./content/probe.ts";
 import { fetchSource } from "./content/sources/index.ts";
 import type { Db } from "./db.ts";
@@ -31,6 +34,8 @@ const BOUNDARY_EPSILON_MS = 10_000;
 const LINK_KEEPER_INTERVAL_MS = 10 * 60_000;
 /** Refresh a link this far before it expires, rather than waiting for it to lapse. */
 const LINK_REFRESH_MARGIN_MS = 25 * 60_000;
+/** A bad link gets a fresh URL first; only persistent failures remove its program. */
+const MAX_SOURCE_FAILURES = 3;
 
 export interface ChannelView {
   id: string;
@@ -39,6 +44,25 @@ export interface ChannelView {
   background?: string;
   description: string;
   nowTitle?: string;
+}
+
+export interface DirectTuneView {
+  serverTime: number;
+  channel: { id: string; name: string };
+  playback: {
+    mode: "direct" | "hls";
+    hlsPath: string;
+    reason?: "unsupported-codecs" | "source-unavailable" | "remote-direct-disabled";
+    directUrl?: string;
+    videoCodec: string | null;
+    audioCodec: string | null;
+    title: string;
+    start: number;
+    duration: number;
+    offsetMs: number;
+    endsAt: number;
+  };
+  next: { title: string; start: number; duration: number } | null;
 }
 
 /**
@@ -50,6 +74,15 @@ export class ChannelService {
   private readonly generators = new Map<string, ScheduleGenerator>();
   private readonly cinemeta: Cinemeta;
   private readonly resolver: StreamResolver | null;
+  private readonly debridBudget: BudgetedTorBoxApi | null;
+  /**
+   * When each channel last aired a program to a viewer. Written by `programProvider`,
+   * which the supervisor calls at tune-in and at every program boundary, so it records
+   * genuine demand rather than mere interest from the admin UI or the catalog.
+   */
+  private readonly lastWatched = new Map<string, number>();
+  /** Failures reported by independent viewer sessions for one scheduled program. */
+  private readonly sourceFailures = new Map<string, number>();
 
   constructor(
     private channels: ChannelDef[],
@@ -58,8 +91,11 @@ export class ChannelService {
     /** Injectable so an integration test can observe what the feed was asked to air. */
     private readonly feedLog = logger("feed"),
   ) {
+    if (!config.persistResolvedUrls) db.scrubResolvedUrls();
     this.cinemeta = new Cinemeta(db);
-    this.resolver = buildResolver(config, db);
+    const built = buildResolver(config, db);
+    this.resolver = built.resolver;
+    this.debridBudget = built.budget;
 
     for (const channel of channels) {
       this.generators.set(
@@ -79,6 +115,10 @@ export class ChannelService {
 
   list(): ChannelDef[] {
     return this.channels;
+  }
+
+  debridBudgetStatus() {
+    return this.debridBudget?.status() ?? null;
   }
 
   /**
@@ -263,6 +303,34 @@ export class ChannelService {
     return true;
   }
 
+  /**
+   * Refresh a source after its first failures, then take a persistently broken program
+   * out of the timeline. The start time is part of the key so a late report from an old
+   * playback session can never skip whatever replaced it.
+   */
+  private reportSourceFailure(channelId: string, program: { id: number; start_ms: number; ref_key: string; title: string }): void {
+    const now = getNowPlaying(this.db, channelId);
+    if (!now || now.program.id !== program.id || now.program.start_ms !== program.start_ms) return;
+
+    this.generators.get(channelId)?.invalidateUrl(now.program);
+    const key = `${channelId}:${program.start_ms}:${program.ref_key}`;
+    const failures = (this.sourceFailures.get(key) ?? 0) + 1;
+    this.sourceFailures.set(key, failures);
+
+    if (failures < MAX_SOURCE_FAILURES) {
+      log.warn(
+        `${channelId}: source for "${program.title}" failed (${failures}/${MAX_SOURCE_FAILURES}); refreshing link`,
+      );
+      return;
+    }
+
+    this.sourceFailures.delete(key);
+    this.db.dropFrom(channelId, program.start_ms);
+    this.feeds.stopChannel(channelId, `source failed repeatedly: ${program.title}`);
+    void this.generators.get(channelId)?.ensureHorizon();
+    log.warn(`${channelId}: skipped "${program.title}" after ${failures} failed source attempts`);
+  }
+
   get(id: string): ChannelDef | undefined {
     return this.channels.find((c) => c.id === id);
   }
@@ -288,15 +356,32 @@ export class ChannelService {
   }
 
   /**
-   * Keeps the currently airing and next program's links valid on every channel.
+   * Whether a channel is worth preparing links for: playing right now, or watched recently
+   * enough that the viewer is likely to come back to it.
+   */
+  isChannelActive(channelId: string, now = Date.now()): boolean {
+    if (this.config.linkKeeperScope === "all") return true;
+    if (this.feeds.isChannelLive(channelId)) return true;
+    const last = this.lastWatched.get(channelId);
+    return last !== undefined && now - last < this.config.linkKeeperGraceMinutes * 60_000;
+  }
+
+  /**
+   * Keeps the currently airing and next program's links valid on the channels in use.
    *
    * Debrid links last a few hours but the schedule is built a day ahead, so most programs
    * would otherwise need refreshing at the moment someone tunes in — putting a debrid
    * round trip directly in the path of pressing play. Doing it on a timer moves that cost
    * off the critical path entirely.
+   *
+   * Doing it for *every* channel, though, spends that budget on channels nobody is
+   * watching: with a large lineup it is a constant stream of link requests against a rate
+   * limited API, and it fills the debrid account with entries for shows never viewed.
+   * A cold channel resolves on demand at tune-in instead, which costs a few seconds once.
    */
   async refreshUpcomingLinks(): Promise<void> {
     for (const channel of this.channels) {
+      if (!this.isChannelActive(channel.id)) continue;
       const gen = this.generators.get(channel.id);
       if (!gen) continue;
 
@@ -308,6 +393,18 @@ export class ChannelService {
         await gen.freshUrl(entry.program).catch(() => null);
       }
     }
+  }
+
+  /**
+   * Readies the link for whatever airs at `fromMs`, so the next program boundary does not
+   * pay a debrid round trip. A no-op when the stored link is still valid.
+   */
+  private async prewarmNext(channelId: string, fromMs: number): Promise<void> {
+    const gen = this.generators.get(channelId);
+    if (!gen) return;
+    const [next] = getGuide(this.db, channelId, fromMs, 1);
+    if (!next) return;
+    await gen.freshUrl(next.program).catch(() => null);
   }
 
   startLinkKeeper(): NodeJS.Timeout {
@@ -346,13 +443,16 @@ export class ChannelService {
   }
 
   provisioning(channelId: string): {
-    state: "provisioning" | "ready" | "waiting-for-torbox" | "error";
+    state: "provisioning" | "ready" | "waiting-for-torbox" | "waiting-for-budget" | "error";
     scheduledThrough: number | null;
     targetThrough: number;
     progress: number;
     detail: string | null;
+    /** False when links are resolved on demand rather than kept warm ahead of time. */
+    active: boolean;
   } {
     const now = Date.now();
+    const active = this.isChannelActive(channelId, now);
     const targetThrough = now + this.config.scheduleHorizonHours * 3600_000;
     const scheduledThrough = this.db.timelineEnd(channelId).endMs;
     const generator = this.generators.get(channelId)?.status();
@@ -360,9 +460,10 @@ export class ChannelService {
     const progress = Math.min(1, coveredMs / Math.max(1, targetThrough - now));
     const hasCurrent = scheduledThrough !== null && scheduledThrough > now;
     const cooldown = cooldownRemainingSeconds();
+    const budget = this.debridBudget?.status();
 
     if (hasCurrent) {
-      return { state: "ready", scheduledThrough, targetThrough, progress, detail: null };
+      return { state: "ready", scheduledThrough, targetThrough, progress, detail: null, active };
     }
     if (cooldown > 0) {
       return {
@@ -371,6 +472,21 @@ export class ChannelService {
         targetThrough,
         progress,
         detail: `retrying after TorBox cooldown (${cooldown}s)`,
+        active,
+      };
+    }
+    if (budget && (
+      budget.hourlyUsed >= budget.hourlyLimit || budget.dailyUsed >= budget.dailyLimit
+    )) {
+      const hourly = budget.hourlyUsed >= budget.hourlyLimit;
+      const resetAt = hourly ? budget.hourlyResetAt : budget.dailyResetAt;
+      return {
+        state: "waiting-for-budget",
+        scheduledThrough,
+        targetThrough,
+        progress,
+        detail: `debrid operation budget resets at ${new Date(resetAt).toLocaleString()}`,
+        active,
       };
     }
     if (generator?.lastFailure) {
@@ -380,6 +496,7 @@ export class ChannelService {
         targetThrough,
         progress,
         detail: generator.lastFailure,
+        active,
       };
     }
     return {
@@ -388,11 +505,72 @@ export class ChannelService {
       targetThrough,
       progress,
       detail: generator?.generating ? "preparing the first playable slot" : "queued for preparation",
+      active,
     };
   }
 
   streamUrl(channelId: string): string {
-    return `${baseUrl(this.config)}/ch/${channelId}/live.m3u8`;
+    // Prefixed even for local playback. The prefixed route is served locally too, so
+    // there is no branch here and no way for a token-less URL to reach a player.
+    return `${baseUrl(this.config)}${urlPrefix(this.config)}/ch/${channelId}/live.m3u8`;
+  }
+
+  /**
+   * A native client's tune instruction. The phone receives only the current signed URL,
+   * never resolver credentials or durable debrid ids, and falls back to our HLS feed
+   * when the measured codecs are not broadly direct-playable.
+   */
+  async directTune(
+    channelId: string,
+    at = Date.now(),
+    allowDirect = true,
+  ): Promise<DirectTuneView | null> {
+    const channel = this.get(channelId);
+    const generator = this.generators.get(channelId);
+    if (!channel || !generator) return null;
+
+    await generator.ensureCoverage(at);
+    const now = getNowPlaying(this.db, channelId, at);
+    if (!now) return null;
+
+    this.lastWatched.set(channelId, at);
+    const directUrl = await generator.freshUrl(now.program);
+    const probe = this.db.getProbe(now.program.ref_key);
+    const direct = Boolean(
+      allowDirect && directUrl && directPlayable(probe?.video_codec, probe?.audio_codec),
+    );
+    const guide = getGuide(this.db, channelId, at, 3);
+    const next = guide.find((entry) => entry.program.start_ms > at)?.program;
+
+    void this.prewarmNext(channelId, now.program.start_ms + now.program.duration_ms);
+
+    return {
+      serverTime: at,
+      channel: { id: channel.id, name: channel.name },
+      playback: {
+        mode: direct ? "direct" : "hls",
+        hlsPath: `ch/${encodeURIComponent(channelId)}/live.m3u8`,
+        ...(!direct
+          ? {
+              reason: !allowDirect
+                ? "remote-direct-disabled" as const
+                : directUrl
+                  ? "unsupported-codecs" as const
+                  : "source-unavailable" as const,
+            }
+          : { directUrl: directUrl! }),
+        videoCodec: probe?.video_codec ?? null,
+        audioCodec: probe?.audio_codec ?? null,
+        title: now.program.title,
+        start: now.program.start_ms,
+        duration: now.program.duration_ms,
+        offsetMs: now.offsetMs,
+        endsAt: now.program.start_ms + now.program.duration_ms,
+      },
+      next: next
+        ? { title: next.title, start: next.start_ms, duration: next.duration_ms }
+        : null,
+    };
   }
 
   /**
@@ -404,6 +582,10 @@ export class ChannelService {
     return async (): Promise<NextProgram | null> => {
       const gen = this.generators.get(channelId);
       if (!gen) return null;
+
+      // Reaching here means a viewer is actually being served, which is what keeps this
+      // channel in the link keeper's working set.
+      this.lastWatched.set(channelId, Date.now());
 
       // Wait only for the current moment to be scheduled. On a cold channel the full
       // horizon takes minutes to build, and a viewer should not wait for all of it.
@@ -432,6 +614,11 @@ export class ChannelService {
         return null;
       }
 
+      // Get the next program's link ready while this one plays. On a cold channel the
+      // link keeper has not prepared anything, and resolving at the boundary would stall
+      // the transition. Deliberately not awaited: playback must not wait on it.
+      void this.prewarmNext(channelId, now.program.start_ms + now.program.duration_ms);
+
       let probe = this.db.getProbe(now.program.ref_key);
       // Rows created before language-aware probing know that audio exists but not which
       // track is English. Upgrade those lazily when the title next airs, using the URL
@@ -453,6 +640,7 @@ export class ChannelService {
       }
       return {
         title: now.program.title,
+        onSourceFailure: () => this.reportSourceFailure(channelId, now.program),
         source: {
           url,
           offsetSeconds: Math.max(0, now.offsetMs / 1000),
@@ -516,25 +704,53 @@ export class ChannelService {
   }
 }
 
+/** Server-side first pass; the Android client applies its own device decoder check too. */
+function directPlayable(videoCodec: string | null | undefined, audioCodec: string | null | undefined): boolean {
+  const video = new Set(["h264", "hevc", "vp8", "vp9", "av1"]);
+  const audio = new Set(["aac", "mp3", "ac3", "eac3", "opus", "vorbis", "flac"]);
+  return Boolean(videoCodec && video.has(videoCodec) && (!audioCodec || audio.has(audioCodec)));
+}
+
 /**
  * Direct TorBox is preferred when a key is present: it picks releases on real byte sizes
  * and parsed release names rather than substring matching, and it drops the addon's
  * redirect hop from playback. A pre-configured debrid addon remains the simpler path.
  */
-function buildResolver(config: Config, db: Db): StreamResolver | null {
+function buildResolver(
+  config: Config,
+  db: Db,
+): { resolver: StreamResolver | null; budget: BudgetedTorBoxApi | null } {
+  if (config.debridAgentUrl && config.debridAgentToken) {
+    log.info(`resolving via isolated debrid agent (indexer: ${config.indexerUrl})`);
+    const budget = new BudgetedTorBoxApi(
+      new DebridAgentClient(config.debridAgentUrl, config.debridAgentToken), db, config,
+    );
+    return { resolver: new TorBoxResolver(
+      budget,
+      config.indexerUrl,
+      config,
+      db,
+    ), budget };
+  }
   if (config.torboxApiKey) {
-    log.info(`resolving via TorBox directly (indexer: ${config.indexerUrl})`);
-    return new TorBoxResolver(config.torboxApiKey, config.indexerUrl, config, db);
+    log.warn(`resolving via legacy in-process TorBox key (indexer: ${config.indexerUrl})`);
+    const budget = new BudgetedTorBoxApi(new TorBoxClient(config.torboxApiKey), db, config);
+    return { resolver: new TorBoxResolver(
+      budget,
+      config.indexerUrl,
+      config,
+      db,
+    ), budget };
   }
   if (config.streamAddonUrl) {
     log.info("resolving via configured stream addon");
-    return new AddonResolver(config.streamAddonUrl, config);
+    return { resolver: new AddonResolver(config.streamAddonUrl, config), budget: null };
   }
   log.error(
-    "No resolver configured: channels will have nothing to air. Set torboxApiKey, " +
+    "No resolver configured: channels will have nothing to air. Set debridAgentUrl/token, torboxApiKey, " +
       "or streamAddonUrl pointing at a stream addon that has your debrid key.",
   );
-  return null;
+  return { resolver: null, budget: null };
 }
 
 /** Stands in when nothing is configured, so startup fails loudly but not fatally. */

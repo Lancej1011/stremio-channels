@@ -23,3 +23,6 @@ configuration or compatibility impact. Pull requests must pass CI before merge.
 
 By contributing, you agree that your contribution is licensed under the MIT
 License.
+
+Maintainers should follow [RELEASING.md](RELEASING.md); release files are produced and
+attested in CI rather than uploaded from a workstation.

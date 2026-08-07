@@ -1,10 +1,11 @@
 {
-  "key": "boomerang-classics",
-  "label": "Boomerang Classics",
+  "key": "cartoon-time-capsule",
+  "label": "Cartoon Time Capsule",
   "summary": "Forty-one cartoon favorites spanning Scooby mysteries, Hanna-Barbera comedy, theatrical shorts and retro favorites.",
+  "legacyIds": ["boomerang-classics"],
   "channel": {
-    "id": "boomerang-classics",
-    "name": "Boomerang Classics",
+    "id": "cartoon-time-capsule",
+    "name": "Cartoon Time Capsule",
     "description": "A round-the-clock home for classic Scooby-Doo, Hanna-Barbera favorites and retro Saturday-morning cartoons.",
     "strategy": "sequential",
     "seed": 1992,
@@ -131,7 +132,7 @@
         ]
       },
       {
-        "name": "Boomerang Prime Time",
+        "name": "Prime-Time Cartoons",
         "start": "19:00",
         "end": "22:00",
         "strategy": "sequential",

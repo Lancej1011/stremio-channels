@@ -32,6 +32,9 @@ export function testConfig(dataDir: string, overrides: Partial<Config> = {}): Co
     // Pinned: auto-detection would pick a different encoder on different machines, and
     // hardware encoders are the ones most likely to be busy or absent on CI.
     encoder: "cpu",
+    // Integration fixtures intentionally place synthetic local clip paths in SQLite and
+    // have no resolver that could recreate them. Production defaults to memory-only URLs.
+    persistResolvedUrls: true,
     idleShutdownSeconds: 3600,
     scheduleHorizonHours: 24,
     // Spread the parsed defaults rather than replacing each block wholesale, so a new

@@ -7,9 +7,10 @@ import {
   pickBest,
   type SelectionPrefs,
 } from "../quality.ts";
-import type { PreparatoryResolver, PreparedStream, ResolvedStream } from "../resolver.ts";
+import type { FailoverResolver, PreparatoryResolver, PreparedStream, ResolvedStream } from "../resolver.ts";
+import { Cinemeta } from "../cinemeta.ts";
 import { IndexerClient, type Candidate } from "./indexer.ts";
-import { TorBoxClient } from "./torbox.ts";
+import type { TorBoxApi } from "./torbox.ts";
 
 const log = logger("torbox-resolver");
 
@@ -32,19 +33,26 @@ interface CachedBinding {
   torrentId: number;
   fileId: number;
   label: string;
+  /** Source hash lets a failed release be excluded on the next discovery pass. */
+  hash: string;
 }
 
 const BINDING_CACHE_MS = 30 * 24 * 60 * 60_000;
 
-export class TorBoxResolver implements PreparatoryResolver {
+export class TorBoxResolver implements PreparatoryResolver, FailoverResolver {
   readonly name = "torbox";
-  private readonly torbox: TorBoxClient;
+  private readonly torbox: TorBoxApi;
   private readonly indexer: IndexerClient;
   private readonly prefs: SelectionPrefs;
+  /** Purely db-backed, so this shares the scheduler's cache rather than duplicating it. */
+  private readonly cinemeta: Cinemeta;
+  /** Failed hashes are intentionally process-local: a restart gives a transient outage another chance. */
+  private readonly rejectedHashes = new Map<string, Set<string>>();
 
-  constructor(apiKey: string, indexerUrl: string, config: Config, private readonly db: Db) {
-    this.torbox = new TorBoxClient(apiKey);
+  constructor(torbox: TorBoxApi, indexerUrl: string, config: Config, private readonly db: Db) {
+    this.torbox = torbox;
     this.indexer = new IndexerClient(indexerUrl);
+    this.cinemeta = new Cinemeta(db);
     this.prefs = {
       qualityPreference: config.qualityPreference,
       maxSizeBytes: config.maxSizeGb ? config.maxSizeGb * 1e9 : undefined,
@@ -84,6 +92,17 @@ export class TorBoxResolver implements PreparatoryResolver {
     return prepared?.url && prepared.expiresAt
       ? { ...prepared, url: prepared.url, expiresAt: prepared.expiresAt }
       : null;
+  }
+
+  invalidate(ref: ContentRef): void {
+    const key = `torbox-binding:v3:${refKey(ref)}`;
+    const binding = this.db.getCached<CachedBinding>(key, BINDING_CACHE_MS);
+    if (binding?.hash) {
+      const rejected = this.rejectedHashes.get(refKey(ref)) ?? new Set<string>();
+      rejected.add(binding.hash);
+      this.rejectedHashes.set(refKey(ref), rejected);
+    }
+    this.db.deleteCached(key);
   }
 
   /**
@@ -142,11 +161,20 @@ export class TorBoxResolver implements PreparatoryResolver {
       return null;
     }
 
+    // Episodes prove themselves by their SxxEyy number; a movie has only its title, so
+    // fetch it. Cinemeta is db-cached and the scheduler has normally just asked for the
+    // same title, so this rarely costs a request.
+    const movieTitle = ref.season === undefined
+      ? (await this.cinemeta.titleInfo(ref).catch(() => null))?.name ?? null
+      : null;
+
     // Rank first, then ask about cache status: checking every result would be a much
     // larger request for candidates that would never be chosen anyway.
+    const rejected = this.rejectedHashes.get(refKey(ref));
     const ranked = candidates
       .slice()
       .sort((a, b) => b.release.seeders - a.release.seeders)
+      .filter((candidate) => !rejected?.has(candidate.hash))
       .slice(0, CANDIDATE_LIMIT);
 
     // One request returns cache status *and* contents, so candidates can be judged on
@@ -160,7 +188,7 @@ export class TorBoxResolver implements PreparatoryResolver {
       const entry = cached.get(candidate.hash);
       if (!entry) continue;
 
-      const file = chooseFile(entry.files ?? [], candidate, ref);
+      const file = chooseFile(entry.files ?? [], candidate, ref, movieTitle);
       if (!file) {
         // A season pack that does not contain this episode used to be discovered only
         // after committing the slot to it. Now it simply loses the ranking.
@@ -217,6 +245,7 @@ export class TorBoxResolver implements PreparatoryResolver {
       torrentId,
       fileId: accountFile.id,
       label: `${candidate.release.resolution || "?"}p ${gb(file.size)}GB ${candidate.title}`.slice(0, 90),
+      hash: candidate.hash,
     };
   }
 }
@@ -227,7 +256,9 @@ function validBinding(value: CachedBinding | null | undefined): value is CachedB
       Number.isInteger(value.torrentId) &&
       value.torrentId > 0 &&
       Number.isInteger(value.fileId) &&
-      value.fileId >= 0,
+      value.fileId >= 0 &&
+      typeof value.hash === "string" &&
+      value.hash.length > 0,
   );
 }
 
@@ -252,6 +283,11 @@ export function chooseFile(
   files: readonly TorBoxFileInfo[],
   candidate: Candidate,
   ref: ContentRef,
+  /**
+   * The title being requested, for movies. Without it a multi-file torrent can only be
+   * guessed at; with it a file can be *proved* to be the right one.
+   */
+  movieTitle?: string | null,
 ): TorBoxFileInfo | null {
   const usable = files.filter((f) => VIDEO.test(f.name) && !JUNK.test(f.name));
   const pool = usable.length > 0 ? usable : files.filter((f) => VIDEO.test(f.name));
@@ -276,13 +312,62 @@ export function chooseFile(
     return null;
   }
 
-  // The indexer often tells us which file it meant; trust that before guessing.
-  if (candidate.fileIdx !== undefined) {
-    const byIdx = pool.find((f) => f.id === candidate.fileIdx);
-    if (byIdx) return byIdx;
+  // One video file: the indexer matched this torrent to the request and there is nothing
+  // to choose between. The torrent name is the evidence.
+  if (pool.length === 1) return pool[0]!;
+
+  // Several video files, so this is a pack — either one film plus its extras, or a
+  // collection of unrelated films. Guessing here is how a channel ends up airing the
+  // wrong movie under the right title, so require the filename to prove itself.
+  //
+  // The indexer's `fileIdx` is deliberately not consulted: it indexes the torrent's own
+  // file list, while TorBox's `id` is an account-side identifier it remaps after
+  // createtorrent. Comparing them matched unrelated files that happened to share a
+  // number, which is how features ended up bound to two-hundred-megabyte featurettes.
+  if (movieTitle) {
+    const named = pool.filter((f) => nameMatchesTitle(f.name, movieTitle));
+    // Largest match, so a film wins over its own deleted scenes and featurettes.
+    if (named.length > 0) return named.reduce((a, b) => (b.size > a.size ? b : a));
+    return null;
   }
 
   return pool.reduce((a, b) => (b.size > a.size ? b : a));
+}
+
+/** Strips separators, punctuation and the extension so names compare on words alone. */
+function normaliseForMatch(value: string): string {
+  return value
+    .slice(value.lastIndexOf("/") + 1)
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/[._\-+]+/g, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function containsSequence(haystack: readonly string[], needle: readonly string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  return haystack.some((_, i) => needle.every((word, j) => haystack[i + j] === word));
+}
+
+/**
+ * Whether a filename plausibly holds the given title.
+ *
+ * Compares whole words rather than substrings, so a short title like "It" cannot match
+ * inside "with". Falls back to token overlap because release names routinely drop
+ * subtitles — "Star Wars A New Hope" for "Star Wars: Episode IV - A New Hope".
+ */
+export function nameMatchesTitle(fileName: string, title: string): boolean {
+  const words = normaliseForMatch(fileName).split(" ").filter(Boolean);
+  const wanted = normaliseForMatch(title).split(" ").filter(Boolean);
+  if (wanted.length === 0 || words.length === 0) return false;
+  if (containsSequence(words, wanted)) return true;
+
+  const meaningful = wanted.filter((word) => word.length > 2);
+  if (meaningful.length === 0) return false;
+  const present = meaningful.filter((word) => words.includes(word)).length;
+  return present / meaningful.length >= 0.7;
 }
 
 function describe(ref: ContentRef): string {

@@ -17,6 +17,7 @@ import type { FastifyInstance } from "fastify";
 import { promisify } from "node:util";
 import type { ChannelService } from "./channels.ts";
 import { baseUrl, type Config } from "./config.ts";
+import { redactToken } from "./access.ts";
 import {
   computeCodecs,
   parseBitrateKbps,
@@ -182,10 +183,14 @@ async function describeChannel(service: ChannelService, config: Config, channelI
     publicBaseUrl: base,
     publicBaseUrlExplicit: Boolean(config.publicBaseUrl),
     publicBaseUrlIsLoopback: /^https?:\/\/(127\.|localhost|\[::1\])/i.test(base),
+    // Whether remote clients need a token at all, which decides whether a phone failing
+    // to reach the server is a routing problem or an install-URL problem.
+    accessTokenConfigured: Boolean(config.accessToken),
 
-    // Exactly what Stremio is handed, so a mismatch with the above is obvious.
+    // Exactly what Stremio is handed, so a mismatch with the above is obvious. The token
+    // is masked because this output is meant to be pasted into a bug report.
     stream: {
-      url: service.streamUrl(channelId),
+      url: redactToken(config, service.streamUrl(channelId)),
       name: "Channels",
       description: "Live",
       behaviorHints: { notWebReady: true },

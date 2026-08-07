@@ -36,6 +36,90 @@ function makeApp(name: string, initial: ChannelDef[]) {
 }
 
 describe("channel API", () => {
+  it("publishes a bounded, read-only guide for the standalone viewer", async () => {
+    const configured = channelSchema.parse({
+      ...channel("viewer"),
+      name: "Viewer Channel",
+      poster: "https://images.example/channel.jpg",
+      description: "A private channel",
+    });
+    const ctx = makeApp("viewer-guide", [configured]);
+    const now = Date.now();
+    ctx.db.putCached("cinemeta:movie:tt5000001", {
+      id: "tt5000001",
+      name: "Viewer Movie",
+      runtime: "60 min",
+      poster: "https://images.example/program.jpg",
+      background: "https://images.example/background.jpg",
+    });
+    ctx.db.insertPrograms([{
+      channel_id: "viewer",
+      slot_index: 0,
+      start_ms: now - 60_000,
+      duration_ms: 3_600_000,
+      ref_key: "tt5000001",
+      title: "Viewer Movie",
+      resolved_url: "https://secret.example/debrid-token",
+      url_expires_at: now + 3_600_000,
+      daypart: "Prime time",
+      torrent_id: 123,
+      file_id: 456,
+    }]);
+    ctx.db.putProbe({
+      ref_key: "tt5000001",
+      duration_ms: 3_600_000,
+      video_codec: "h264",
+      audio_codec: "aac",
+      probed_at: now,
+    });
+
+    const response = await ctx.app.inject({ method: "GET", url: "/viewer/guide.json?hours=99" });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    assert.equal(body.until - body.serverTime, 12 * 3_600_000);
+    assert.equal(body.channels[0].id, "viewer");
+    assert.equal(body.channels[0].poster, "https://images.example/channel.jpg");
+    assert.equal(body.channels[0].description, "A private channel");
+    assert.deepEqual(body.channels[0].programs[0], {
+      title: "Viewer Movie",
+      start: now - 60_000,
+      duration: 3_600_000,
+      daypart: "Prime time",
+      isNow: true,
+    });
+    assert.doesNotMatch(response.body, /debrid-token|resolved_url|torrent_id|file_id/);
+
+    const tune = await ctx.app.inject({ method: "GET", url: "/viewer/tune/viewer" });
+    assert.equal(tune.statusCode, 200, tune.body);
+    assert.equal(tune.headers["cache-control"], "no-store");
+    assert.equal(tune.json().playback.mode, "direct");
+    assert.equal(tune.json().playback.directUrl, "https://secret.example/debrid-token");
+    assert.ok(tune.json().playback.offsetMs >= 60_000);
+
+    const remotePolicy = await ctx.service.directTune("viewer", now, false);
+    assert.equal(remotePolicy?.playback.mode, "hls");
+    assert.equal(remotePolicy?.playback.reason, "remote-direct-disabled");
+    assert.equal(remotePolicy?.playback.directUrl, undefined);
+    assert.equal(tune.json().playback.hlsPath, "ch/viewer/live.m3u8");
+    assert.doesNotMatch(tune.body, /torrent_id|file_id|123|456/);
+
+    ctx.db.putProbe({
+      ref_key: "tt5000001",
+      duration_ms: 3_600_000,
+      video_codec: "mpeg2video",
+      audio_codec: "aac",
+      probed_at: now,
+    });
+    const fallback = await ctx.app.inject({ method: "GET", url: "/viewer/tune/viewer" });
+    assert.equal(fallback.json().playback.mode, "hls");
+    assert.equal(fallback.json().playback.reason, "unsupported-codecs");
+    assert.equal(fallback.json().playback.directUrl, undefined);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
   it("refuses a colliding preset unless replacement is explicit", async () => {
     const ctx = makeApp("preset-conflict", [channel("scifi")]);
     const before = readFileSync(ctx.config.channelsFile, "utf8");
@@ -70,12 +154,12 @@ describe("channel API", () => {
     const added = await ctx.app.inject({
       method: "POST",
       url: "/api/presets/apply",
-      payload: { key: "adult-swim", mode: "add" },
+      payload: { key: "after-dark-animation", mode: "add" },
     });
 
     assert.equal(added.statusCode, 200);
     assert.equal(added.json().action, "added");
-    assert.deepEqual(ctx.service.list().map((item) => item.id), ["scifi", "adultswim"]);
+    assert.deepEqual(ctx.service.list().map((item) => item.id), ["scifi", "after-dark-animation"]);
 
     await ctx.app.close();
     ctx.service.feeds.stopAll("test complete");
@@ -172,6 +256,194 @@ describe("channel API", () => {
     });
     assert.equal(unconfigured.statusCode, 400);
     assert.match(unconfigured.json().missing, /tmdb/);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+});
+
+describe("sharing channel guides", () => {
+  it("exports a guide the import side accepts", async () => {
+    const ctx = makeApp("share-roundtrip", [channel("scifi"), channel("sitcoms")]);
+
+    const all = await ctx.app.inject({ method: "GET", url: "/api/channels/export" });
+    assert.equal(all.statusCode, 200);
+    assert.equal(all.json().kind, "headend.channels");
+    assert.deepEqual(all.json().channels.map((c: { id: string }) => c.id), ["scifi", "sitcoms"]);
+
+    const one = await ctx.app.inject({ method: "GET", url: "/api/channels/export?ids=sitcoms" });
+    assert.deepEqual(one.json().channels.map((c: { id: string }) => c.id), ["sitcoms"]);
+
+    const missing = await ctx.app.inject({ method: "GET", url: "/api/channels/export?ids=nope" });
+    assert.equal(missing.statusCode, 404);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("imports new channels and refuses to clobber existing ones", async () => {
+    const ctx = makeApp("share-import", [channel("scifi")]);
+    const guide = {
+      kind: "headend.channels",
+      version: 1,
+      channels: [channel("cooking"), channel("scifi", "tt5000002")],
+    };
+
+    // `add` is all-or-nothing: the colliding id means nothing is written.
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+    const conflict = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import", payload: { bundle: guide, mode: "add" },
+    });
+    assert.equal(conflict.statusCode, 409);
+    assert.deepEqual(conflict.json().conflicts, ["scifi"]);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+
+    const preview = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, mode: "rename", dryRun: true },
+    });
+    assert.equal(preview.statusCode, 200, preview.body);
+    assert.match(preview.json().confirmation, /^[a-f0-9]{64}$/);
+
+    const unconfirmed = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, mode: "rename" },
+    });
+    assert.equal(unconfirmed.statusCode, 428);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+
+    const renamed = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: {
+        bundle: guide,
+        mode: "rename",
+        confirmation: preview.json().confirmation,
+      },
+    });
+    assert.equal(renamed.statusCode, 200);
+    assert.deepEqual(renamed.json().added, ["cooking"]);
+    assert.deepEqual(renamed.json().renamed, [{ from: "scifi", to: "scifi-2" }]);
+    assert.deepEqual(ctx.service.list().map((c) => c.id), ["scifi", "cooking", "scifi-2"]);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("previews without writing when asked", async () => {
+    const ctx = makeApp("share-dryrun", [channel("scifi")]);
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/channels/import",
+      payload: {
+        bundle: { kind: "headend.channels", version: 1, channels: [channel("cooking")] },
+        dryRun: true,
+      },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().dryRun, true);
+    assert.match(res.json().confirmation, /^[a-f0-9]{64}$/);
+    assert.deepEqual(res.json().added, ["cooking"]);
+    assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
+    assert.equal(ctx.service.list().length, 1);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("removes imported artwork by default and binds confirmation to the current lineup", async () => {
+    const ctx = makeApp("share-artwork", [channel("scifi")]);
+    const imported = channelSchema.parse({
+      ...channel("cooking"),
+      poster: "https://tracker.example/pixel.jpg",
+    });
+    const guide = { kind: "headend.channels", version: 1, channels: [imported] };
+    const preview = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, dryRun: true },
+    });
+    assert.equal(preview.statusCode, 200, preview.body);
+    assert.equal(preview.json().artworkRemoved, 1);
+
+    // A concurrent edit makes the old preview stale rather than applying against a lineup
+    // the operator did not review.
+    ctx.service.reload([channel("scifi"), channel("news")]);
+    const stale = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, confirmation: preview.json().confirmation },
+    });
+    assert.equal(stale.statusCode, 428);
+
+    const fresh = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, dryRun: true },
+    });
+    const applied = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, confirmation: fresh.json().confirmation },
+    });
+    assert.equal(applied.statusCode, 200, applied.body);
+    assert.equal(ctx.service.get("cooking")?.poster, undefined);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("rejects imported automatic sources unless the operator opts in", async () => {
+    const ctx = makeApp("share-sources", [channel("scifi")]);
+    const guide = {
+      kind: "headend.channels",
+      version: 1,
+      channels: [{
+        id: "remote-list",
+        name: "Remote List",
+        source: { kind: "mdblist", url: "https://mdblist.com/lists/example/list", limit: 20 },
+      }],
+    };
+    const response = await ctx.app.inject({
+      method: "POST", url: "/api/channels/import",
+      payload: { bundle: guide, dryRun: true },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /automatic content sources/);
+    assert.deepEqual(ctx.service.list().map((item) => item.id), ["scifi"]);
+
+    await ctx.app.close();
+    ctx.service.feeds.stopAll("test complete");
+    ctx.db.close();
+  });
+
+  it("rejects malformed guides without touching the lineup", async () => {
+    const ctx = makeApp("share-bad", [channel("scifi")]);
+    const before = readFileSync(ctx.config.channelsFile, "utf8");
+
+    const cases: Record<string, unknown>[] = [
+      { bundle: { hello: "world" } },
+      { bundle: { kind: "headend.channels", version: 1, channels: [] } },
+      { bundle: { kind: "headend.channels", version: 1, channels: [{ id: "Bad Id!", name: "x" }] } },
+      // Two channels sharing an id would silently lose one on write.
+      {
+        bundle: {
+          kind: "headend.channels", version: 1,
+          channels: [channel("dupe"), channel("dupe")],
+        },
+      },
+      // Exactly one input, never both and never neither.
+      {},
+      { bundle: { kind: "headend.channels", version: 1, channels: [channel("x")] }, url: "https://example.com/g.json" },
+      { url: "file:///etc/passwd" },
+    ];
+    for (const payload of cases) {
+      const res = await ctx.app.inject({ method: "POST", url: "/api/channels/import", payload });
+      assert.equal(res.statusCode, 400, JSON.stringify(payload).slice(0, 60));
+    }
     assert.equal(readFileSync(ctx.config.channelsFile, "utf8"), before);
 
     await ctx.app.close();

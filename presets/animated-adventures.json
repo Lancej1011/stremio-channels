@@ -1,11 +1,12 @@
 {
-  "key": "disney-afternoon",
-  "label": "Disney Animation",
-  "summary": "Thirty animated Disney series across the classic afternoon, One Saturday Morning and modern eras.",
+  "key": "animated-adventures",
+  "label": "Animated Adventures",
+  "summary": "Thirty animated adventure series spanning classic afternoon, weekend-morning and modern eras.",
+  "legacyIds": ["disney"],
   "channel": {
-    "id": "disney",
-    "name": "Disney Afternoon",
-    "description": "Disney animation from the classic afternoon block through modern adventures.",
+    "id": "animated-adventures",
+    "name": "Animated Adventures",
+    "description": "Animation from classic afternoon blocks through modern adventures.",
     "strategy": "sequential",
     "seed": 1991,
     "content": [],
@@ -13,7 +14,7 @@
     "pools": [
       {
         "id": "classic-afternoon",
-        "name": "Classic Disney Afternoon",
+        "name": "Classic Animation",
         "content": [
           {
             "type": "series",
@@ -184,7 +185,7 @@
         ]
       },
       {
-        "name": "The Disney Afternoon",
+        "name": "Afternoon Adventures",
         "start": "15:00",
         "end": "19:00",
         "strategy": "sequential",

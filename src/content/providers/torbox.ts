@@ -185,6 +185,19 @@ export interface UserTorrentFile {
   size: number;
 }
 
+/**
+ * The capability the resolver needs from TorBox. Keeping this interface free of
+ * credentials lets the same resolver use either the legacy in-process client or the
+ * isolated debrid agent.
+ */
+export interface TorBoxApi {
+  verify(): Promise<boolean>;
+  checkCached(hashes: string[], withFiles?: boolean): Promise<Map<string, CachedTorrent>>;
+  addMagnet(hash: string): Promise<number | null>;
+  torrentFiles(torrentId: number): Promise<UserTorrentFile[]>;
+  downloadLink(torrentId: number, fileId: number): Promise<string | null>;
+}
+
 interface UserTorrent {
   id: number;
   files?: {
@@ -207,7 +220,7 @@ interface Envelope<T> {
  *
  * TorBox has no content discovery of its own, so hashes come from an indexer addon.
  */
-export class TorBoxClient {
+export class TorBoxClient implements TorBoxApi {
   constructor(private readonly apiKey: string) {}
 
   private async call<T>(
@@ -239,8 +252,12 @@ export class TorBoxClient {
           const route = path.split("?")[0] ?? path;
           requestCounts.set(route, (requestCounts.get(route) ?? 0) + 1);
 
+          // The API key may come from a secret file and is intentionally transmitted only
+          // to TorBox's fixed HTTPS origin. Neither the origin nor this header name is input.
+          // lgtm[js/file-access-to-http]
           const res = await fetch(`${API}/${path}`, {
             ...init,
+            // lgtm[js/file-access-to-http]
             headers: { Authorization: `Bearer ${this.apiKey}`, ...(init.headers ?? {}) },
             signal: AbortSignal.timeout(timeoutMs),
           });

@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -24,6 +24,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ffmpeg
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run licenses:check
+      - run: npm run workflows:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -34,9 +37,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           load: true
@@ -50,11 +53,13 @@ jobs:
           cp channels.example.json "$RUNNER_TEMP/channels-config/channels.json"
           docker run -d --name stremio-channels-ci \
             -p 127.0.0.1:7654:7654 \
+            -e ACCESS_TOKEN=ci_smoke_token_0123456789abcdef \
             -v "$RUNNER_TEMP/channels-config:/config" \
             -v "$RUNNER_TEMP/channels-data:/data" \
             stremio-channels:ci
           for _ in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:7654/health >/dev/null; then
+            if curl --fail --silent \
+              http://127.0.0.1:7654/ci_smoke_token_0123456789abcdef/health >/dev/null; then
               exit 0
             fi
             sleep 1

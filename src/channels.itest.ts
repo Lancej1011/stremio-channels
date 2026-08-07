@@ -193,3 +193,86 @@ describe("tune-in", { timeout: 180_000 }, () => {
     db.close();
   });
 });
+
+/**
+ * The link keeper trades debrid API calls for instant playback. Preparing every channel
+ * spends that budget on channels nobody opens, so these pin down which channels qualify.
+ */
+describe("link keeper", { timeout: 180_000 }, () => {
+  it("only keeps links warm for channels actually in use", async () => {
+    const dataDir = join(root, "linkkeeper");
+    const db = openDb(dataDir);
+    const config = testConfig(dataDir, { scheduleHorizonHours: 0.01 });
+    const recorder = recordingLogger();
+
+    const startMs = Date.now() - 10_000;
+    seedProgram(db, "watched", "tt5000010", startMs);
+    seedProgram(db, "cold", "tt5000011", startMs);
+
+    const service = new ChannelService(
+      [channel("watched", "tt5000010"), channel("cold", "tt5000011")],
+      db,
+      config,
+      recorder.log,
+    );
+
+    // Nothing has been tuned yet, so no channel has earned link preparation.
+    assert.equal(service.isChannelActive("watched"), false);
+    assert.equal(service.isChannelActive("cold"), false);
+
+    const feed = await service.feeds.claim("watched");
+    await recorder.waitFor(AIRING, 60_000);
+
+    // Airing a program to a viewer is what puts a channel into the working set.
+    assert.equal(service.isChannelActive("watched"), true);
+    assert.equal(
+      service.isChannelActive("cold"),
+      false,
+      "a channel nobody opened must stay out of the working set",
+    );
+
+    // The viewer leaves. The channel stays warm for the grace window, so surfing away and
+    // back does not pay the resolve cost twice.
+    feed.stop("viewer left");
+    const deadline = Date.now() + 60_000;
+    while (feed.isRunning && Date.now() < deadline) await sleep(200);
+    assert.equal(feed.isRunning, false, "feed did not stop in time");
+    assert.equal(service.isChannelActive("watched"), true, "grace window must survive the feed");
+
+    const afterGrace = Date.now() + config.linkKeeperGraceMinutes * 60_000 + 1;
+    assert.equal(
+      service.isChannelActive("watched", afterGrace),
+      false,
+      "the channel must go cold once the grace window lapses",
+    );
+
+    // A lineup where nothing currently qualifies must still be safe to sweep.
+    await service.refreshUpcomingLinks();
+
+    service.feeds.stopAll("test complete");
+    await sleep(500);
+    db.close();
+  });
+
+  it("prepares every channel when linkKeeperScope is all", async () => {
+    const dataDir = join(root, "linkkeeper-all");
+    const db = openDb(dataDir);
+    const config = testConfig(dataDir, {
+      scheduleHorizonHours: 0.01,
+      linkKeeperScope: "all",
+    });
+    seedProgram(db, "never", "tt5000012", Date.now() - 10_000);
+
+    const service = new ChannelService(
+      [channel("never", "tt5000012")],
+      db,
+      config,
+      recordingLogger().log,
+    );
+
+    // The escape hatch back to the original behaviour: no tune-in required.
+    assert.equal(service.isChannelActive("never"), true);
+    await service.refreshUpcomingLinks();
+    db.close();
+  });
+});

@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "./log.ts";
 
@@ -36,6 +36,15 @@ export interface ProbeRow {
   /** Raw container language tag for diagnostics; normally `eng` for the preferred track. */
   audio_language?: string | null;
   probed_at: number;
+}
+
+export interface DebridUsage {
+  hourlyUsed: number;
+  hourlyLimit: number;
+  hourlyResetAt: number;
+  dailyUsed: number;
+  dailyLimit: number;
+  dailyResetAt: number;
 }
 
 const SCHEMA = `
@@ -87,16 +96,28 @@ CREATE TABLE IF NOT EXISTS meta_cache (
   value      TEXT    NOT NULL,
   fetched_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS usage_counters (
+  kind            TEXT    NOT NULL,
+  bucket_start_ms INTEGER NOT NULL,
+  value           INTEGER NOT NULL,
+  PRIMARY KEY (kind, bucket_start_ms)
+);
 `;
 
 export type Db = ReturnType<typeof openDb>;
 
 export function openDb(dataDir: string) {
-  mkdirSync(dataDir, { recursive: true });
-  const db = new Database(join(dataDir, "channels.db"));
+  mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  restrict(dataDir, 0o700);
+  const dbPath = join(dataDir, "channels.db");
+  const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   db.exec(SCHEMA);
+  // The database contains short-lived signed provider URLs. SQLite creates its sidecar
+  // files lazily, but WAL mode has created them by this point on normal filesystems.
+  for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) restrict(path, 0o600);
   // CREATE TABLE IF NOT EXISTS does not evolve an existing installation. These nullable
   // additions are intentionally migration-safe: a null index on an old audio row tells
   // playback to re-probe it once, then the cache is upgraded in place.
@@ -134,6 +155,14 @@ export function openDb(dataDir: string) {
       `UPDATE programs SET resolved_url = ?, url_expires_at = ?, torrent_id = COALESCE(?, torrent_id),
               file_id = COALESCE(?, file_id) WHERE id = ?`,
     ),
+    clearResolved: db.prepare(
+      `UPDATE programs SET resolved_url = NULL, url_expires_at = NULL, torrent_id = NULL, file_id = NULL
+       WHERE id = ?`,
+    ),
+    scrubResolvedUrls: db.prepare(
+      `UPDATE programs SET resolved_url = NULL, url_expires_at = NULL
+       WHERE resolved_url IS NOT NULL OR url_expires_at IS NOT NULL`,
+    ),
     insertAiring: db.prepare(
       `INSERT INTO airings (channel_id, ref_key, aired_at) VALUES (?, ?, ?)`,
     ),
@@ -164,7 +193,47 @@ export function openDb(dataDir: string) {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, fetched_at = excluded.fetched_at`,
     ),
     deleteMeta: db.prepare(`DELETE FROM meta_cache WHERE key = ?`),
+    getUsage: db.prepare(
+      `SELECT value FROM usage_counters WHERE kind = ? AND bucket_start_ms = ?`,
+    ),
+    bumpUsage: db.prepare(
+      `INSERT INTO usage_counters (kind, bucket_start_ms, value) VALUES (?, ?, ?)
+       ON CONFLICT(kind, bucket_start_ms) DO UPDATE SET value = value + excluded.value`,
+    ),
+    pruneUsage: db.prepare(`DELETE FROM usage_counters WHERE bucket_start_ms < ?`),
   };
+
+  const usageValue = (kind: string, bucket: number): number => {
+    const row = stmts.getUsage.get(kind, bucket) as { value: number } | undefined;
+    return row?.value ?? 0;
+  };
+  const usageAt = (now: number, hourlyLimit: number, dailyLimit: number): DebridUsage => {
+    const hourStart = Math.floor(now / 3_600_000) * 3_600_000;
+    const dayStart = Math.floor(now / 86_400_000) * 86_400_000;
+    return {
+      hourlyUsed: usageValue("debrid-hour", hourStart),
+      hourlyLimit,
+      hourlyResetAt: hourStart + 3_600_000,
+      dailyUsed: usageValue("debrid-day", dayStart),
+      dailyLimit,
+      dailyResetAt: dayStart + 86_400_000,
+    };
+  };
+  const consumeDebrid = db.transaction(
+    (amount: number, hourlyLimit: number, dailyLimit: number, now: number) => {
+      const usage = usageAt(now, hourlyLimit, dailyLimit);
+      if (usage.hourlyUsed + amount > hourlyLimit || usage.dailyUsed + amount > dailyLimit) {
+        return { allowed: false, usage };
+      }
+      const hourStart = usage.hourlyResetAt - 3_600_000;
+      const dayStart = usage.dailyResetAt - 86_400_000;
+      stmts.bumpUsage.run("debrid-hour", hourStart, amount);
+      stmts.bumpUsage.run("debrid-day", dayStart, amount);
+      // Retain only the current and immediately previous day for diagnostics/restarts.
+      stmts.pruneUsage.run(dayStart - 86_400_000);
+      return { allowed: true, usage: usageAt(now, hourlyLimit, dailyLimit) };
+    },
+  );
 
   return {
     raw: db,
@@ -233,6 +302,16 @@ export function openDb(dataDir: string) {
       stmts.setResolved.run(url, expiresAt, torrentId, fileId, programId);
     },
 
+    /** Discards a failed release binding so the resolver must select another one. */
+    clearResolved(programId: number): void {
+      stmts.clearResolved.run(programId);
+    },
+
+    /** Removes bearer-like media capabilities while retaining refreshable file ids. */
+    scrubResolvedUrls(): void {
+      stmts.scrubResolvedUrls.run();
+    },
+
     recordAiring(channelId: string, refKey: string, atMs: number): void {
       stmts.insertAiring.run(channelId, refKey, atMs);
     },
@@ -298,7 +377,29 @@ export function openDb(dataDir: string) {
     deleteCached(key: string): void {
       stmts.deleteMeta.run(key);
     },
+
+    consumeDebridUsage(
+      amount: number,
+      hourlyLimit: number,
+      dailyLimit: number,
+      now = Date.now(),
+    ): { allowed: boolean; usage: DebridUsage } {
+      return consumeDebrid(amount, hourlyLimit, dailyLimit, now);
+    },
+
+    debridUsage(hourlyLimit: number, dailyLimit: number, now = Date.now()): DebridUsage {
+      return usageAt(now, hourlyLimit, dailyLimit);
+    },
   };
+}
+
+function restrict(path: string, mode: number): void {
+  try {
+    chmodSync(path, mode);
+  } catch {
+    // FAT-like mounts do not implement Unix modes. Deployment diagnostics/documentation
+    // still warn operators not to place secret-bearing data on a shared filesystem.
+  }
 }
 
 function ensureColumn(

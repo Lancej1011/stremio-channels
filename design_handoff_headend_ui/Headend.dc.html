@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0c0f; color: #e6e8ee; font-family: Archivo, "Helvetica Neue", Helvetica, sans-serif; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #f5b544; text-decoration: none; }
+  a:hover { color: #ffd08a; text-decoration: underline; }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid #f5b544; outline-offset: 2px; border-radius: 3px; }
+  ::-webkit-scrollbar { height: 10px; width: 10px; }
+  ::-webkit-scrollbar-track { background: #0b0c0f; }
+  ::-webkit-scrollbar-thumb { background: #2b313d; border-radius: 6px; }
+  @keyframes onair { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+</style>
+</helmet>
+
+<div style="min-height: 100vh; display: grid; grid-template-columns: 232px 1fr; background: #0b0c0f;">
+
+  <aside style="border-right: 1px solid #22262f; background: #0e1014; display: flex; flex-direction: column; gap: 22px; padding: 20px 14px; position: sticky; top: 0; height: 100vh;">
+    <div style="display: flex; flex-direction: column; gap: 6px; padding: 0 8px;">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <div style="width: 10px; height: 10px; border-radius: 2px; background: #4fd18b; animation: onair 2.4s ease-in-out infinite;"></div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #8b93a3;">Headend</span>
+      </div>
+      <div style="font-size: 17px; font-weight: 600; letter-spacing: -.01em;">Stremio Channels</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ baseUrl }}</div>
+    </div>
+
+    <nav style="display: flex; flex-direction: column; gap: 2px;">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+        <button type="button" onClick="{{ item.go }}" aria-current="{{ item.current }}" style="display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 6px; border: 1px solid {{ item.border }}; background: {{ item.bg }}; color: {{ item.color }}; font-size: 13.5px; font-weight: 500; cursor: pointer;" style-hover="background: #171a21; color: #e6e8ee;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; width: 16px; color: #6d7484;">{{ item.num }}</span>
+          <span style="flex: 1;">{{ item.label }}</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ item.badge }}</span>
+        </button>
+      </sc-for>
+    </nav>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid #22262f; border-radius: 8px; background: #101318;">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #6d7484;">Data source</div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: {{ sourceColor }};">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ sourceColor }};"></span>{{ sourceLabel }}
+      </div>
+      <div style="font-size: 11.5px; line-height: 1.45; color: #6d7484;">{{ sourceNote }}</div>
+    </div>
+  </aside>
+
+  <main style="min-width: 0; display: flex; flex-direction: column;">
+
+    <header style="position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 18px; padding: 14px 24px; border-bottom: 1px solid #22262f; background: rgba(11,12,15,.92); backdrop-filter: blur(8px);">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em;">{{ viewTitle }}</h1>
+        <div style="font-size: 12.5px; color: #8b93a3;">{{ viewSub }}</div>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #22262f; border-radius: 6px; background: #101318;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #6d7484;">WALL</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-variant-numeric: tabular-nums; color: #e6e8ee;">{{ clock }}</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #22262f; border-radius: 6px; background: #101318; color: {{ healthColor }}; font-size: 12.5px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ healthColor }};"></span>{{ healthLabel }}
+        </div>
+        <button type="button" onClick="{{ refresh }}" style="padding: 7px 13px; border-radius: 6px; border: 1px solid #2f3542; background: #171a21; color: #e6e8ee; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">Refresh</button>
+      </div>
+    </header>
+
+    <!-- ─────────────────────────────── DASHBOARD -->
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 20px;">
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px;">
+          <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="4">
+            <div style="padding: 15px 16px; border: 1px solid #22262f; border-radius: 10px; background: #101318; display: flex; flex-direction: column; gap: 9px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #8b93a3;">{{ t.label }}</span>
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ t.dot }};"></span>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 7px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 27px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.02em;">{{ t.value }}</span>
+                <span style="font-size: 12.5px; color: #8b93a3;">{{ t.unit }}</span>
+              </div>
+              <div style="font-size: 12px; color: #6d7484; line-height: 1.4;">{{ t.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start;">
+
+          <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #22262f;">
+              <span style="width: 8px; height: 8px; border-radius: 2px; background: #4fd18b; animation: onair 2.4s ease-in-out infinite;"></span>
+              <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">On air now</h2>
+              <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ onAirCount }} feeds running</span>
+            </div>
+            <sc-for list="{{ onAir }}" as="c" hint-placeholder-count="3">
+              <div style="display: grid; grid-template-columns: 46px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 13px 16px; border-bottom: 1px solid #191d25;">
+                <div style="width: 46px; height: 62px; border-radius: 4px; border: 1px solid #262b35; background: repeating-linear-gradient(135deg, #171a21 0 6px, #1c2029 6px 12px); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #6d7484;">{{ c.initials }}</div>
+                <div style="min-width: 0; display: flex; flex-direction: column; gap: 5px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 13.5px; font-weight: 600;">{{ c.name }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #6d7484;">{{ c.id }}</span>
+                  </div>
+                  <div style="font-size: 13px; color: #cfd4de; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ c.nowTitle }}</div>
+                  <div style="height: 3px; border-radius: 2px; background: #22262f; overflow: hidden;">
+                    <div style="height: 100%; width: {{ c.progress }}%; background: #4fd18b;"></div>
+                  </div>
+                  <div style="display: flex; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">
+                    <span>until {{ c.until }}</span>
+                    <span>next {{ c.nextTime }} · {{ c.nextTitle }}</span>
+                  </div>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .1em; padding: 3px 7px; border-radius: 3px; border: 1px solid {{ c.statusColor }}; color: {{ c.statusColor }};">{{ c.statusLabel }}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ c.encoder }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #22262f;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Schedule coverage</h2>
+                <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">horizon {{ horizonHours }}h</span>
+              </div>
+              <sc-for list="{{ warnings }}" as="w" hint-placeholder-count="3">
+                <div style="display: flex; gap: 11px; padding: 12px 16px; border-bottom: 1px solid #191d25;">
+                  <span style="margin-top: 4px; width: 8px; height: 8px; border-radius: 2px; flex: none; background: {{ w.color }};"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                    <span style="font-size: 13px; font-weight: 500;">{{ w.title }}</span>
+                    <span style="font-size: 12px; line-height: 1.45; color: #8b93a3;">{{ w.detail }}</span>
+                    <button type="button" onClick="{{ w.act }}" style="align-self: flex-start; margin-top: 3px; padding: 5px 10px; border-radius: 5px; border: 1px solid #2f3542; background: #171a21; color: #e6e8ee; font-size: 12px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">{{ w.action }}</button>
+                  </div>
+                </div>
+              </sc-for>
+            </section>
+
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+              <div style="padding: 13px 16px; border-bottom: 1px solid #22262f; display: flex; align-items: center; gap: 10px;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Debrid calls</h2>
+                <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{ cooldownColor }};">{{ cooldownLabel }}</span>
+              </div>
+              <sc-for list="{{ debridCalls }}" as="d" hint-placeholder-count="4">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid #191d25;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #cfd4de; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;">{{ d.endpoint }}</span>
+                  <span style="width: 84px; height: 4px; border-radius: 2px; background: #22262f; overflow: hidden;"><span style="display: block; height: 100%; width: {{ d.pct }}%; background: #f5b544;"></span></span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: #8b93a3; width: 42px; text-align: right;">{{ d.count }}</span>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─────────────────────────────── CHANNELS -->
+    <sc-if value="{{ isChannels }}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+          <sc-for list="{{ statusFilters }}" as="f" hint-placeholder-count="5">
+            <button type="button" onClick="{{ f.go }}" style="display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid {{ f.border }}; background: {{ f.bg }}; color: {{ f.color }}; font-size: 12.5px; cursor: pointer;" style-hover="border-color: #3b4250;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ f.dot }};"></span>{{ f.label }}
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ f.count }}</span>
+            </button>
+          </sc-for>
+          <button type="button" onClick="{{ newChannel }}" style="margin-left: auto; padding: 8px 14px; border-radius: 6px; border: 1px solid #f5b544; background: rgba(245,181,68,.12); color: #f5b544; font-size: 12.5px; font-weight: 600; cursor: pointer;" style-hover="background: rgba(245,181,68,.2);">New channel</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px;">
+          <sc-for list="{{ visibleChannels }}" as="c" hint-placeholder-count="6">
+            <article style="border: 1px solid #22262f; border-radius: 10px; background: #101318; overflow: hidden; display: flex; flex-direction: column;">
+              <div style="display: grid; grid-template-columns: 78px minmax(0,1fr); gap: 13px; padding: 14px;">
+                <div style="height: 108px; border-radius: 5px; border: 1px solid #262b35; background: repeating-linear-gradient(135deg, #171a21 0 7px, #1c2029 7px 14px); display: flex; align-items: flex-end; padding: 7px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; line-height: 1.3; color: #6d7484;">{{ c.artHint }}</div>
+                <div style="min-width: 0; display: flex; flex-direction: column; gap: 7px;">
+                  <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="font-size: 14.5px; font-weight: 600; line-height: 1.25; text-wrap: pretty;">{{ c.name }}</span>
+                    <span style="margin-left: auto; flex: none; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .08em; padding: 3px 6px; border-radius: 3px; border: 1px solid {{ c.statusColor }}; color: {{ c.statusColor }};">{{ c.statusLabel }}</span>
+                  </div>
+                  <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ c.meta }}</div>
+                  <div style="display: flex; flex-direction: column; gap: 3px; margin-top: 2px;">
+                    <div style="display: flex; gap: 8px; align-items: baseline;">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .1em; color: #4fd18b; width: 34px; flex: none;">NOW</span>
+                      <span style="font-size: 12.5px; color: #e6e8ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ c.nowTitle }}</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: baseline;">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .1em; color: #6d7484; width: 34px; flex: none;">{{ c.nextTime }}</span>
+                      <span style="font-size: 12.5px; color: #8b93a3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ c.nextTitle }}</span>
+                    </div>
+                  </div>
+                  <div style="height: 3px; border-radius: 2px; background: #22262f; overflow: hidden; margin-top: 3px;">
+                    <div style="height: 100%; width: {{ c.progress }}%; background: {{ c.statusColor }};"></div>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid #191d25; background: #0e1014;">
+                <sc-for list="{{ c.actions }}" as="a" hint-placeholder-count="4">
+                  <button type="button" onClick="{{ a.go }}" style="flex: 1; padding: 6px 4px; border-radius: 5px; border: 1px solid #2b313d; background: #14171d; color: #cfd4de; font-size: 12px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">{{ a.label }}</button>
+                </sc-for>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─────────────────────────────── CHANNEL EDITOR -->
+    <sc-if value="{{ isEditor }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 24px; border-bottom: 1px solid #22262f; background: #0e1014;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">{{ editorBreadcrumb }}</span>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #f5b544;">
+            <span style="width: 7px; height: 7px; border-radius: 50%; background: #f5b544;"></span>Unsaved changes
+          </span>
+          <button type="button" onClick="{{ preview12 }}" style="padding: 7px 13px; border-radius: 6px; border: 1px solid #2f3542; background: #171a21; color: #e6e8ee; font-size: 12.5px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">Preview next 12 hours</button>
+          <button type="button" onClick="{{ save }}" style="padding: 7px 15px; border-radius: 6px; border: 1px solid #4fd18b; background: rgba(79,209,139,.14); color: #4fd18b; font-size: 12.5px; font-weight: 600; cursor: pointer;" style-hover="background: rgba(79,209,139,.24);">Save channel</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 20px 24px 48px; align-items: start;">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+              <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Identity and playback</h2>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #8b93a3;">Channel name
+                  <input value="{{ draftName }}" onChange="{{ setName }}" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #2b313d; background: #0b0c0f; color: #e6e8ee; font-family: Archivo, sans-serif; font-size: 13px;" />
+                </label>
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #8b93a3;">Channel id
+                  <input value="{{ draftId }}" readonly="readonly" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #2b313d; background: #0e1014; color: #8b93a3; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;" />
+                </label>
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #8b93a3;">Seed
+                  <input value="{{ draftSeed }}" onChange="{{ setSeed }}" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #2b313d; background: #0b0c0f; color: #e6e8ee; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;" />
+                </label>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <span style="font-size: 12px; color: #8b93a3;">Playback strategy</span>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;">
+                  <sc-for list="{{ strategies }}" as="s" hint-placeholder-count="3">
+                    <button type="button" onClick="{{ s.go }}" aria-pressed="{{ s.pressed }}" style="text-align: left; padding: 11px 12px; border-radius: 7px; border: 1px solid {{ s.border }}; background: {{ s.bg }}; cursor: pointer; display: flex; flex-direction: column; gap: 4px;" style-hover="border-color: #3b4250;">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{ s.color }};">{{ s.key }}</span>
+                      <span style="font-size: 11.5px; line-height: 1.4; color: #8b93a3;">{{ s.blurb }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </section>
+
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #22262f;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Content pools</h2>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">{{ poolSummary }}</span>
+                <button type="button" onClick="{{ addPool }}" style="margin-left: auto; padding: 5px 10px; border-radius: 5px; border: 1px solid #2f3542; background: #171a21; color: #e6e8ee; font-size: 12px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">Add pool</button>
+              </div>
+              <sc-for list="{{ pools }}" as="p" hint-placeholder-count="3">
+                <div style="padding: 13px 16px; border-bottom: 1px solid #191d25; display: flex; flex-direction: column; gap: 9px;">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <span style="font-size: 13px; font-weight: 600;">{{ p.name }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ p.id }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 3px; border: 1px solid #2b313d; color: #8b93a3;">{{ p.kind }}</span>
+                    <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">{{ p.count }} pinned</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    <sc-for list="{{ p.pins }}" as="pin" hint-placeholder-count="5">
+                      <span style="display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 5px; border: 1px solid #2b313d; background: #14171d; font-size: 12px; color: #cfd4de;">{{ pin.name }}
+                        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #6d7484;">×{{ pin.weight }}</span>
+                      </span>
+                    </sc-for>
+                    <span style="padding: 4px 8px; font-size: 12px; color: #6d7484;">{{ p.more }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </section>
+
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #22262f;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Daypart schedule</h2>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">drag edges to retime · overlaps rejected</span>
+              </div>
+              <div style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #6d7484;">
+                  <sc-for list="{{ hourTicks }}" as="h" hint-placeholder-count="9">
+                    <span>{{ h.label }}</span>
+                  </sc-for>
+                </div>
+                <sc-for list="{{ daypartRows }}" as="row" hint-placeholder-count="4">
+                  <div style="display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 12px; align-items: center;">
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">{{ row.label }}</span>
+                    <div style="position: relative; height: 30px; border-radius: 5px; background: #14171d; border: 1px solid #22262f;">
+                      <sc-for list="{{ row.blocks }}" as="b" hint-placeholder-count="3">
+                        <button type="button" onClick="{{ b.go }}" title="{{ b.title }}" style="position: absolute; top: 3px; bottom: 3px; left: {{ b.left }}%; width: {{ b.width }}%; border-radius: 4px; border: 1px solid {{ b.border }}; background: {{ b.bg }}; color: #e6e8ee; font-size: 11px; padding: 0 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; cursor: grab;" style-hover="border-color: #f5b544;">{{ b.name }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="display: flex; align-items: center; gap: 9px; margin-top: 4px; padding: 10px 12px; border-radius: 7px; border: 1px solid rgba(245,181,68,.35); background: rgba(245,181,68,.08); font-size: 12.5px; color: #f5b544;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px;">VALIDATION</span>
+                  <span style="color: #e6e8ee;">{{ validation }}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 16px; position: sticky; top: 74px;">
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318; display: flex; flex-direction: column;">
+              <div style="padding: 13px 14px; border-bottom: 1px solid #22262f; display: flex; flex-direction: column; gap: 9px;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Content library</h2>
+                <input value="{{ query }}" onChange="{{ setQuery }}" placeholder="Search Cinemeta — title, 2 characters min" style="padding: 8px 10px; border-radius: 6px; border: 1px solid #2b313d; background: #0b0c0f; color: #e6e8ee; font-size: 12.5px; font-family: Archivo, sans-serif;" />
+              </div>
+              <sc-for list="{{ searchResults }}" as="r" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #191d25;">
+                  <div style="width: 34px; height: 46px; border-radius: 3px; border: 1px solid #262b35; background: repeating-linear-gradient(135deg, #171a21 0 6px, #1c2029 6px 12px);"></div>
+                  <div style="min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                    <span style="font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.name }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ r.meta }}</span>
+                  </div>
+                  <button type="button" onClick="{{ r.add }}" style="padding: 5px 9px; border-radius: 5px; border: 1px solid #2f3542; background: #171a21; color: #cfd4de; font-size: 11.5px; cursor: pointer;" style-hover="border-color: #4fd18b; color: #4fd18b;">Pin</button>
+                </div>
+              </sc-for>
+              <div style="padding: 11px 14px; font-size: 11.5px; color: #6d7484; line-height: 1.45;">{{ searchNote }}</div>
+            </section>
+
+            <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+              <div style="padding: 13px 14px; border-bottom: 1px solid #22262f; display: flex; align-items: center; gap: 9px;">
+                <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Projected lineup</h2>
+                <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">no debrid calls</span>
+              </div>
+              <sc-for list="{{ projection }}" as="p" hint-placeholder-count="6">
+                <div style="display: grid; grid-template-columns: 54px minmax(0,1fr); gap: 10px; padding: 9px 14px; border-bottom: 1px solid #191d25;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #8b93a3; font-variant-numeric: tabular-nums;">{{ p.time }}</span>
+                  <div style="min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.title }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ p.note }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </section>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─────────────────────────────── PRESETS -->
+    <sc-if value="{{ isPresets }}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 22px 24px 44px; display: flex; flex-direction: column; gap: 16px;">
+        <p style="margin: 0; max-width: 660px; font-size: 13px; line-height: 1.55; color: #8b93a3;">Applying a preset copies its lineup and daypart grid into your channels. It stays fully editable and never changes on its own. Presets emulate programming style only; no network branding is included.</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px;">
+          <sc-for list="{{ presets }}" as="p" hint-placeholder-count="6">
+            <article style="border: 1px solid {{ p.border }}; border-radius: 10px; background: #101318; display: flex; flex-direction: column; overflow: hidden;">
+              <div style="padding: 15px 16px 13px; display: flex; flex-direction: column; gap: 9px;">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                  <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                    <span style="font-size: 15px; font-weight: 600; letter-spacing: -.01em;">{{ p.label }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ p.key }}</span>
+                  </div>
+                  <span style="margin-left: auto; flex: none; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .08em; padding: 3px 7px; border-radius: 3px; border: 1px solid {{ p.stateColor }}; color: {{ p.stateColor }};">{{ p.state }}</span>
+                </div>
+                <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #8b93a3; text-wrap: pretty;">{{ p.summary }}</p>
+                <div style="display: flex; gap: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">
+                  <span>{{ p.titles }} titles</span><span>{{ p.poolCount }} pools</span><span>{{ p.dayparts.length }} dayparts</span>
+                </div>
+              </div>
+              <div style="padding: 0 16px 13px; display: flex; flex-direction: column; gap: 5px;">
+                <sc-for list="{{ p.dayparts }}" as="d" hint-placeholder-count="4">
+                  <div style="display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 10px; align-items: center;">
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ d.window }}</span>
+                    <span style="font-size: 12px; color: #cfd4de; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ d.name }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top: auto; display: flex; gap: 6px; padding: 11px 16px; border-top: 1px solid #191d25; background: #0e1014;">
+                <button type="button" onClick="{{ p.previewLineup }}" style="flex: 1; padding: 7px 4px; border-radius: 5px; border: 1px solid #2b313d; background: #14171d; color: #cfd4de; font-size: 12px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">Preview lineup</button>
+                <button type="button" onClick="{{ p.primary }}" disabled="{{ p.disabled }}" style="flex: 1; padding: 7px 4px; border-radius: 5px; border: 1px solid {{ p.actionBorder }}; background: {{ p.actionBg }}; color: {{ p.actionColor }}; font-size: 12px; font-weight: 600; cursor: {{ p.cursor }};">{{ p.actionLabel }}</button>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─────────────────────────────── GUIDE -->
+    <sc-if value="{{ isGuide }}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 18px 0 40px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 24px;">
+          <sc-for list="{{ guideRanges }}" as="g" hint-placeholder-count="3">
+            <button type="button" onClick="{{ g.go }}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid {{ g.border }}; background: {{ g.bg }}; color: {{ g.color }}; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer;" style-hover="border-color: #3b4250;">{{ g.label }}</button>
+          </sc-for>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">
+            <span style="width: 2px; height: 12px; background: #f5b544;"></span>now {{ clock }}
+          </span>
+        </div>
+
+        <div style="overflow-x: auto; padding: 0 24px;">
+          <div style="min-width: {{ gridWidth }}px; position: relative;">
+            <div style="position: relative; z-index: 6; display: grid; grid-template-columns: 176px 1fr; background: #0b0c0f; border-bottom: 1px solid #22262f;">
+              <div style="padding: 8px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .14em; color: #6d7484; border-right: 1px solid #22262f;">CHANNEL</div>
+              <div style="position: relative; height: 30px;">
+                <sc-for list="{{ ruler }}" as="t" hint-placeholder-count="8">
+                  <span style="position: absolute; left: {{ t.left }}px; top: 8px; padding-left: 6px; border-left: 1px solid #22262f; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">{{ t.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="position: absolute; top: 30px; bottom: 0; left: {{ nowMarker }}px; width: 2px; background: #f5b544; z-index: 5; pointer-events: none;"></div>
+
+            <sc-for list="{{ guideRows }}" as="row" hint-placeholder-count="8">
+              <div style="display: grid; grid-template-columns: 176px 1fr; border-bottom: 1px solid #191d25;">
+                <button type="button" onClick="{{ row.go }}" style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 10px; border: none; border-right: 1px solid #22262f; background: #0e1014; cursor: pointer; text-align: left;" style-hover="background: #14171d;">
+                  <span style="display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: #e6e8ee;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ row.dot }};"></span>{{ row.name }}
+                  </span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #6d7484;">{{ row.id }}</span>
+                </button>
+                <div style="position: relative; height: 62px; background: #101318;">
+                  <sc-for list="{{ row.programs }}" as="p" hint-placeholder-count="5">
+                    <div title="{{ p.title }}" style="position: absolute; top: 4px; bottom: 4px; left: {{ p.left }}px; width: {{ p.width }}px; padding: 6px 8px; border-radius: 4px; border: 1px solid {{ p.border }}; background: {{ p.bg }}; overflow: hidden; display: flex; flex-direction: column; gap: 3px;">
+                      <span style="font-size: 12px; color: #e6e8ee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.title }}</span>
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: {{ p.subColor }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.sub }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ─────────────────────────────── OPERATIONS -->
+    <sc-if value="{{ isOps }}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 22px 24px 44px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; align-items: start;">
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #22262f;">
+              <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Active HLS sessions</h2>
+              <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b93a3;">{{ sessionSummary }}</span>
+            </div>
+            <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="3">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 9px 14px; padding: 12px 16px; border-bottom: 1px solid #191d25;">
+                <div style="flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 13px; font-weight: 500;">{{ s.channel }}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.client }}</span>
+                </div>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #cfd4de; flex: none;">{{ s.encoder }}</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #8b93a3; flex: none;">{{ s.uptime }}</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .08em; padding: 3px 7px; border-radius: 3px; border: 1px solid {{ s.color }}; color: {{ s.color }}; flex: none;">{{ s.state }}</span>
+                <button type="button" onClick="{{ s.act }}" style="margin-left: auto; flex: none; padding: 6px 10px; border-radius: 5px; border: 1px solid #2f3542; background: #171a21; color: #cfd4de; font-size: 12px; cursor: pointer;" style-hover="border-color: #f2604a; color: #f2604a;">Evict</button>
+              </div>
+            </sc-for>
+          </section>
+
+          <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+            <div style="padding: 13px 16px; border-bottom: 1px solid #22262f;">
+              <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Schedule generation</h2>
+            </div>
+            <sc-for list="{{ generation }}" as="g" hint-placeholder-count="5">
+              <div style="display: grid; grid-template-columns: minmax(120px,1fr) minmax(60px,110px) 62px; gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid #191d25;">
+                <div style="min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 12.5px;">{{ g.name }}</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ g.note }}</span>
+                </div>
+                <span style="height: 5px; border-radius: 3px; background: #22262f; overflow: hidden;"><span style="display: block; height: 100%; width: {{ g.pct }}%; background: {{ g.color }};"></span></span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #8b93a3; text-align: right;">{{ g.label }}</span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318;">
+            <div style="padding: 13px 16px; border-bottom: 1px solid #22262f; display: flex; align-items: center; gap: 10px;">
+              <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Diagnostics</h2>
+              <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">last 60 min</span>
+            </div>
+            <sc-for list="{{ diagnostics }}" as="d" hint-placeholder-count="4">
+              <div style="padding: 12px 16px; border-bottom: 1px solid #191d25; display: flex; flex-direction: column; gap: 5px;">
+                <div style="display: flex; align-items: center; gap: 9px;">
+                  <span style="width: 8px; height: 8px; border-radius: 2px; background: {{ d.color }};"></span>
+                  <span style="font-size: 12.5px; font-weight: 500;">{{ d.title }}</span>
+                  <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6d7484;">{{ d.time }}</span>
+                </div>
+                <span style="font-size: 12px; line-height: 1.45; color: #8b93a3;">{{ d.plain }}</span>
+                <div style="display: flex; gap: 6px; margin-top: 2px;">
+                  <button type="button" onClick="{{ d.act }}" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #2f3542; background: #171a21; color: #e6e8ee; font-size: 11.5px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">{{ d.action }}</button>
+                  <button type="button" onClick="{{ d.detailAct }}" style="padding: 5px 10px; border-radius: 5px; border: 1px solid transparent; background: transparent; color: #6d7484; font-size: 11.5px; cursor: pointer;" style-hover="color: #cfd4de;">Raw debug</button>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+
+          <section style="border: 1px solid #22262f; border-radius: 10px; background: #101318; padding: 16px; display: flex; flex-direction: column; gap: 11px;">
+            <h2 style="margin: 0; font-size: 13.5px; font-weight: 600;">Preview player</h2>
+            <div style="aspect-ratio: 16/9; border-radius: 7px; border: 1px solid #262b35; background: repeating-linear-gradient(135deg, #14171d 0 8px, #191d25 8px 16px); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6d7484;">HLS preview · {{ previewChannel }}</div>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" onClick="{{ skip }}" style="flex: 1; padding: 7px 4px; border-radius: 5px; border: 1px solid #2b313d; background: #14171d; color: #cfd4de; font-size: 12px; cursor: pointer;" style-hover="border-color: #f5b544; color: #f5b544;">Skip current</button>
+              <button type="button" onClick="{{ regenerate }}" style="flex: 1; padding: 7px 4px; border-radius: 5px; border: 1px solid #2b313d; background: #14171d; color: #cfd4de; font-size: 12px; cursor: pointer;" style-hover="border-color: #f2604a; color: #f2604a;">Regenerate</button>
+            </div>
+            <div style="font-size: 11.5px; line-height: 1.45; color: #6d7484;">Regenerate resets the stored episode counters for this channel and rebuilds its horizon. Anyone watching rejoins at the next program boundary.</div>
+          </section>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="padding: 14px 24px 28px; border-top: 1px solid #191d25; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #4f5665;">{{ footer }}</div>
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const AMBER = "#f5b544", GREEN = "#4fd18b", RED = "#f2604a", BLUE = "#6fa8dc", DIM = "#6d7484";
+
+const CHANNELS = [
+  { id: "scifi", name: "Late Night Sci-Fi", strategy: "shuffle", seed: 1, status: "live", titles: 16, pools: 0,
+    programs: ["Firefly — S01E05 Out of Gas", "Battlestar Galactica — S02E11 Resurrection Ship", "Blade Runner 2049", "Farscape — S03E04 Self Inflicted Wounds", "Babylon 5 — S03E16 War Without End", "The X-Files — S05E05 The Post-Modern Prometheus"] },
+  { id: "sitcoms", name: "90s Sitcoms", strategy: "shuffle", seed: 7, status: "live", titles: 23, pools: 0,
+    programs: ["Seinfeld — S06E12 The Label Maker", "Frasier — S03E17 High Crane Drifter", "NewsRadio — S02E08 Rat Funeral", "Friends — S04E09 The One Where They're Going to Party", "Spin City — S01E14 The Great Pretender", "Just Shoot Me — S02E03 Old Boyfriends"] },
+  { id: "cartoon-time-capsule", name: "Cartoon Time Capsule", strategy: "sequential", seed: 1992, status: "live", titles: 41, pools: 5,
+    programs: ["Scooby-Doo, Where Are You! — S01E09", "The Flintstones — S03E14", "Jonny Quest — S01E11", "Top Cat — S01E06", "Wacky Races — S01E12", "Dexter's Laboratory — S02E07"] },
+  { id: "animation-eras", name: "Animation Eras", strategy: "sequential", seed: 1996, status: "generating", titles: 38, pools: 4,
+    programs: ["Courage the Cowardly Dog — S01E03", "Samurai Jack — S02E05", "Ed, Edd n Eddy — S01E08", "Johnny Bravo — S02E02", "The Powerpuff Girls — S03E11", "Ben 10 — S01E07"] },
+  { id: "after-dark-animation", name: "After Dark Animation", strategy: "weighted", seed: 2001, status: "warning", titles: 12, pools: 3,
+    programs: ["Aqua Teen Hunger Force — S03E04", "The Venture Bros. — S02E09", "Robot Chicken — S04E12", "Metalocalypse — S02E03", "Space Ghost Coast to Coast — S05E02", "Rick and Morty — S03E06"] },
+  { id: "nineties-animation", name: "90s Animation", strategy: "sequential", seed: 1994, status: "off", titles: 18, pools: 3,
+    programs: ["Rugrats — S03E12", "Hey Arnold! — S02E07", "Doug — S01E09", "The Ren & Stimpy Show — S02E04", "Rocko's Modern Life — S03E05", "CatDog — S01E10"] },
+  { id: "animated-adventures", name: "Animated Adventures", strategy: "sequential", seed: 1990, status: "off", titles: 22, pools: 4,
+    programs: ["DuckTales — S02E14", "Darkwing Duck — S01E06", "TaleSpin — S01E19", "Chip 'n Dale Rescue Rangers — S02E03", "Gargoyles — S02E21", "Goof Troop — S01E11"] },
+  { id: "classic-sitcom-nights", name: "Classic Sitcom Nights", strategy: "weighted", seed: 1985, status: "off", titles: 20, pools: 3,
+    programs: ["The Dick Van Dyke Show — S03E08", "Bewitched — S02E12", "Taxi — S04E05", "Cheers — S06E14", "The Munsters — S01E17", "I Love Lucy — S04E09"] },
+  { id: "comedy-channel", name: "Comedy Channel", strategy: "weighted", seed: 1991, status: "off", titles: 16, pools: 3,
+    programs: ["Reno 911! — S02E06", "Strangers with Candy", "Chappelle's Show — S02E04", "South Park — S07E09", "Drunk History — S03E02", "Key & Peele — S04E07"] },
+  { id: "scifi-channel", name: "Sci-Fi Channel", strategy: "sequential", seed: 1992, status: "off", titles: 9, pools: 2,
+    programs: ["The Twilight Zone — S02E06", "Quantum Leap — S03E15", "Stargate SG-1 — S04E08", "The Outer Limits — S02E11", "Sliders — S02E04", "The X-Files — S06E03"] },
+  { id: "school-morning-throwback", name: "School-Morning Throwback", strategy: "sequential", seed: 1993, status: "off", titles: 14, pools: 3,
+    programs: ["Animaniacs — S01E22", "X-Men — S02E09", "Batman: The Animated Series — S01E14", "Tiny Toon Adventures — S02E06", "Spider-Man — S01E08", "Bobby's World — S03E04"] },
+];
+
+const STATUS = {
+  live: { label: "ON AIR", color: GREEN, filter: "Healthy" },
+  generating: { label: "GENERATING", color: AMBER, filter: "Generating" },
+  warning: { label: "WARNING", color: AMBER, filter: "Warning" },
+  off: { label: "OFF AIR", color: DIM, filter: "Off air" },
+};
+
+const PRESETS = [
+  { key: "cartoon-time-capsule", label: "Cartoon Time Capsule", titles: 41, pools: 5, installed: true,
+    summary: "Forty-one cartoon favorites spanning Scooby mysteries, Hanna-Barbera comedy, theatrical shorts and retro favorites.",
+    dayparts: [["06:00–11:00", "Breakfast Cartoons"], ["11:00–14:00", "Scooby Mystery Marathon"], ["14:00–19:00", "Hanna-Barbera Afternoon"], ["19:00–22:00", "Prime-Time Cartoons"], ["22:00–02:00", "Action All-Stars"]] },
+  { key: "animation-eras", label: "Animation Eras", titles: 38, pools: 4, installed: true,
+    summary: "Cartoon Cartoons mornings, afternoon action, modern prime time.",
+    dayparts: [["06:00–12:00", "Cartoon Cartoons"], ["12:00–17:00", "Afternoon Action"], ["17:00–22:00", "Prime Time"], ["22:00–02:00", "Late Block"]] },
+  { key: "after-dark-animation", label: "After Dark Animation", titles: 12, pools: 3, installed: true,
+    summary: "Adult animation, weighted heavily to the small hours.",
+    dayparts: [["20:00–23:00", "Early Fringe"], ["23:00–03:00", "The Small Hours"], ["03:00–06:00", "Overnight Loop"]] },
+  { key: "nineties-animation", label: "90s Animation", titles: 18, pools: 3, installed: true,
+    summary: "90s animation split into morning, afternoon and late blocks.",
+    dayparts: [["07:00–12:00", "Morning Animation"], ["12:00–18:00", "Afternoon Animation"], ["18:00–23:00", "Late Animation"]] },
+  { key: "animated-adventures", label: "Animated Adventures", titles: 22, pools: 4, installed: false,
+    summary: "The classic animated afternoon, modern Disney in the evening.",
+    dayparts: [["06:00–15:00", "Morning Animation"], ["15:00–18:00", "The Afternoon"], ["18:00–23:00", "Modern Disney"]] },
+  { key: "scifi-channel", label: "Sci-Fi Channel", titles: 9, pools: 2, installed: false,
+    summary: "Anthology mornings, serialised prime time, overnight X-Files.",
+    dayparts: [["06:00–12:00", "Anthology Mornings"], ["12:00–20:00", "Serial Afternoon"], ["20:00–23:00", "Prime Serials"], ["23:00–06:00", "Overnight Files"]] },
+  { key: "classic-sitcom-nights", label: "Classic Sitcom Nights", titles: 20, pools: 3, installed: false,
+    summary: "Retro mornings, 90s staples weighted into prime time.",
+    dayparts: [["06:00–12:00", "Retro Mornings"], ["12:00–20:00", "Daytime Reruns"], ["20:00–00:00", "Prime Sitcoms"]] },
+  { key: "comedy-channel", label: "Comedy Channel", titles: 16, pools: 3, installed: false,
+    summary: "Daytime comedy, the raunchier material kept after 22:00.",
+    dayparts: [["09:00–17:00", "Daytime Comedy"], ["17:00–22:00", "Evening Stand-Up"], ["22:00–02:00", "After Hours"]] },
+  { key: "school-morning-throwback", label: "School-Morning Throwback", titles: 14, pools: 3, installed: false,
+    summary: "School-morning cartoons and syndicated action throwbacks.",
+    dayparts: [["06:00–09:00", "School Morning"], ["15:00–18:00", "Afternoon Block"], ["18:00–20:00", "Syndicated Action"]] },
+];
+
+const POOLS = [
+  { id: "scooby-mysteries", name: "Scooby Mysteries", kind: "pinned", count: 6,
+    pins: [["Scooby-Doo, Where Are You!", 1], ["The New Scooby-Doo Movies", 1], ["Scooby-Doo and Scrappy-Doo", 1], ["The 13 Ghosts of Scooby-Doo", 1]], more: "+2 more" },
+  { id: "hanna-barbera-favorites", name: "Hanna-Barbera Favorites", kind: "pinned", count: 12,
+    pins: [["The Flintstones", 2], ["Top Cat", 1], ["Wacky Races", 1], ["Jonny Quest", 1]], more: "+8 more" },
+  { id: "family-classics", name: "Family Classics", kind: "pinned", count: 13,
+    pins: [["The Jetsons", 1], ["Yogi Bear", 1], ["Huckleberry Hound", 1], ["Magilla Gorilla", 1]], more: "+9 more" },
+  { id: "action-adventure", name: "Action and Adventure", kind: "rule · Cinemeta", count: 6,
+    pins: [["Space Ghost", 1], ["Birdman", 1], ["The Herculoids", 2]], more: "+3 more" },
+];
+
+const DAYPART_ROWS = [
+  { label: "Mon–Fri", blocks: [["Breakfast Cartoons", 6, 11], ["Scooby Mystery Marathon", 11, 14], ["Hanna-Barbera Afternoon", 14, 19], ["Prime Time", 19, 22], ["Action All-Stars", 22, 26]] },
+  { label: "Sat", blocks: [["Saturday Morning", 6, 12], ["Marathon", 12, 19], ["Action All-Stars", 22, 26]] },
+  { label: "Sun", blocks: [["Breakfast Cartoons", 6, 11], ["Family Classics", 11, 19], ["Prime Time", 19, 22]] },
+  { label: "Uncovered", blocks: [["channel default · sequential", 2, 6]] },
+];
+
+const SEARCH = [
+  ["Scooby-Doo, Where Are You!", "series · 1969 · CBS"],
+  ["The Real Ghostbusters", "series · 1986 · ABC"],
+  ["Jonny Quest", "series · 1964 · ABC"],
+  ["Thundarr the Barbarian", "series · 1980 · ABC"],
+];
+
+const DIAGNOSTICS = [
+  { title: "Program skipped on After Dark Animation", plain: "No cached release was available for The Venture Bros. S02E09 within the debrid cooldown, so the slot advanced to the next title. Nothing dropped off air.", action: "Retry resolve", color: AMBER, time: "18:04" },
+  { title: "Debrid returned 429", plain: "TorBox rate-limited two torrent lookups. A shared 90-second cooldown is in effect and the horizon keeper will resume on its own.", action: "View cooldown", color: AMBER, time: "17:52" },
+  { title: "Session evicted at maxSessions", plain: "A sixth viewer tuned in while five encoders were running. The least recently active session on 90s Animation was closed.", action: "Raise maxSessions", color: BLUE, time: "17:31" },
+  { title: "Codec mismatch on School-Morning Throwback", plain: "The advertised CODECS string does not match the codec measured from a real segment, which can stop playback on ExoPlayer devices.", action: "Re-measure", color: RED, time: "16:58" },
+];
+
+const pad = (n) => String(n).padStart(2, "0");
+const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+class Component extends DCLogic {
+  state = {
+    view: "dashboard",
+    now: Date.now(),
+    filter: "all",
+    strategy: "sequential",
+    guideHours: 6,
+    query: "scooby",
+    name: "Cartoon Time Capsule",
+    seed: "1992",
+    live: false,
+    toast: "",
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState({ now: Date.now() }), 15000);
+    this.probe();
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  /** Uses the real endpoints when this UI is served from the server; falls back otherwise. */
+  async probe() {
+    try {
+      const res = await fetch("/api/status", { signal: AbortSignal.timeout(2500) });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      if (Array.isArray(data.channels)) this.setState({ live: true, api: data });
+    } catch { this.setState({ live: false }); }
+  }
+
+  go = (view) => () => this.setState({ view });
+  note = (msg) => () => this.setState({ toast: msg });
+
+  /** Deterministic per-channel lineup so the guide is reproducible, as the server's is. */
+  scheduleFor(channel, startMs, hours) {
+    const out = [];
+    let t = startMs;
+    let i = Math.floor(channel.seed % channel.programs.length);
+    const end = startMs + hours * 3600000;
+    while (t < end) {
+      const title = channel.programs[i % channel.programs.length];
+      const mins = title.includes("—") ? 30 : 90;
+      out.push({ title, start: t, mins, daypart: this.daypartAt(new Date(t).getHours()) });
+      t += mins * 60000;
+      i += 1;
+    }
+    return out;
+  }
+
+  daypartAt(hour) {
+    if (hour < 6) return "Overnight";
+    if (hour < 11) return "Breakfast";
+    if (hour < 14) return "Midday";
+    if (hour < 19) return "Afternoon";
+    if (hour < 22) return "Prime Time";
+    return "Late";
+  }
+
+  renderVals() {
+    const { view, now, filter, guideHours } = this.state;
+    const nowDate = new Date(now);
+
+    const enriched = CHANNELS.map((c) => {
+      const sched = this.scheduleFor(c, now - 2 * 3600000, 12);
+      const idx = Math.max(0, sched.findIndex((p) => p.start + p.mins * 60000 > now));
+      const cur = sched[idx], nxt = sched[idx + 1];
+      const st = STATUS[c.status];
+      const progress = Math.round(((now - cur.start) / (cur.mins * 60000)) * 100);
+      return {
+        ...c, sched, st,
+        initials: c.name.split(" ").slice(0, 2).map((w) => w[0]).join(""),
+        artHint: "channel art 2:3",
+        statusLabel: st.label, statusColor: st.color,
+        meta: `${c.id} · ${c.strategy} · seed ${c.seed} · ${c.titles} titles`,
+        nowTitle: c.status === "off" ? "Off air — schedule ready" : cur.title,
+        nextTitle: nxt.title, nextTime: hhmm(new Date(nxt.start)),
+        until: hhmm(new Date(cur.start + cur.mins * 60000)),
+        progress: c.status === "off" ? 0 : Math.min(100, Math.max(2, progress)),
+        encoder: c.status === "live" ? "nvenc" : "—",
+        actions: [
+          { label: "Edit", go: this.go("editor") },
+          { label: "Preview", go: this.go("ops") },
+          { label: "Guide", go: this.go("guide") },
+          { label: "Ops", go: this.go("ops") },
+        ],
+      };
+    });
+
+    const onAir = enriched.filter((c) => c.status === "live");
+    const counts = { all: enriched.length };
+    for (const c of enriched) counts[c.status] = (counts[c.status] || 0) + 1;
+
+    const chip = (active) => ({
+      border: active ? "#3f4756" : "#22262f",
+      bg: active ? "#171a21" : "#101318",
+      color: active ? "#e6e8ee" : "#8b93a3",
+    });
+
+    const filters = [["all", "All channels", AMBER], ["live", "Healthy", GREEN], ["generating", "Generating", AMBER], ["warning", "Warning", AMBER], ["off", "Off air", DIM]]
+      .map(([key, label, dot]) => ({
+        label, dot, count: counts[key] || 0, go: () => this.setState({ filter: key }), ...chip(filter === key),
+      }));
+
+    // Guide geometry: 4px per minute, ruler on the half hour, live now-marker.
+    const PX = 4;
+    const gStart = new Date(now); gStart.setMinutes(gStart.getMinutes() < 30 ? 0 : 30, 0, 0);
+    const startMs = gStart.getTime() - 30 * 60000;
+    const ruler = [];
+    for (let m = 0; m <= guideHours * 60; m += 30) {
+      ruler.push({ left: m * PX, label: hhmm(new Date(startMs + m * 60000)) });
+    }
+    const guideRows = enriched.map((c) => ({
+      id: c.id, name: c.name, dot: c.st.color, go: this.go("channels"),
+      programs: this.scheduleFor(c, startMs, guideHours + 1).map((p) => {
+        const isNow = p.start <= now && p.start + p.mins * 60000 > now;
+        return {
+          title: p.title, left: Math.round(((p.start - startMs) / 60000) * PX), width: Math.max(40, p.mins * PX - 4),
+          sub: `${hhmm(new Date(p.start))} · ${p.mins}m · ${p.daypart}`,
+          border: isNow ? GREEN : "#262b35", bg: isNow ? "rgba(79,209,139,.12)" : "#14171d",
+          subColor: isNow ? GREEN : DIM,
+        };
+      }),
+    }));
+
+    const strategies = [
+      ["shuffle", "Every episode in one pot. Nothing repeats until the pool has aired."],
+      ["sequential", "Which show airs is random; each show advances to its next episode."],
+      ["weighted", "Sequential, but titles are picked in proportion to their weight."],
+    ].map(([key, blurb]) => {
+      const on = this.state.strategy === key;
+      return { key, blurb, pressed: on ? "true" : "false", color: on ? AMBER : "#cfd4de",
+        border: on ? "rgba(245,181,68,.55)" : "#2b313d", bg: on ? "rgba(245,181,68,.08)" : "#14171d",
+        go: () => this.setState({ strategy: key }) };
+    });
+
+    const projection = this.scheduleFor(enriched[2], now, 4).slice(0, 8).map((p) => ({
+      time: hhmm(new Date(p.start)), title: p.title,
+      note: `${p.daypart} · ${p.mins}m ${p.mins === 30 ? "(measured)" : "(estimated)"}`,
+    }));
+
+    return {
+      baseUrl: "127.0.0.1:7654/ui",
+      clock: `${hhmm(nowDate)}:${pad(nowDate.getSeconds())}`,
+      footer: this.state.toast || "Editing writes channels.json atomically, keeps a .bak, and hot reloads. Only channels whose programming changed are rebuilt.",
+      refresh: () => { this.setState({ now: Date.now(), toast: "" }); this.probe(); },
+
+      nav: [
+        ["dashboard", "Dashboard", ""], ["channels", "Channels", String(enriched.length)],
+        ["editor", "Channel Editor", ""], ["presets", "Presets", "9"],
+        ["guide", "Program Guide", ""], ["ops", "Operations", String(onAir.length)],
+      ].map(([id, label, badge], i) => {
+        const on = view === id;
+        return { label, badge, num: pad(i + 1), current: on ? "page" : "false",
+          border: on ? "#2f3542" : "transparent", bg: on ? "#171a21" : "transparent",
+          color: on ? AMBER : "#cfd4de", go: this.go(id) };
+      }),
+
+      isDashboard: view === "dashboard", isChannels: view === "channels", isEditor: view === "editor",
+      isPresets: view === "presets", isGuide: view === "guide", isOps: view === "ops",
+      viewTitle: { dashboard: "Dashboard", channels: "Channels", editor: "Channel Editor", presets: "Network Presets", guide: "Program Guide", ops: "Operations" }[view],
+      viewSub: {
+        dashboard: "Service health, running feeds and schedule coverage",
+        channels: `${enriched.length} channels · ${onAir.length} on air`,
+        editor: "Cartoon Time Capsule · draft restored from local storage",
+        presets: "Nine ready-made lineups with daypart grids",
+        guide: `Next ${guideHours} hours across every channel`,
+        ops: "Sessions, encoders, horizon progress and diagnostics",
+      }[view],
+
+      sourceLabel: this.state.live ? "Live API" : "Sample data",
+      sourceColor: this.state.live ? GREEN : AMBER,
+      sourceNote: this.state.live
+        ? "Reading /api/status, /api/channels and /api/guide from this host."
+        : "No server on this origin, so the views render representative payloads in the real response shapes.",
+      healthLabel: this.state.live ? "Service healthy" : "Server unreachable",
+      healthColor: this.state.live ? GREEN : AMBER,
+
+      tiles: [
+        { label: "Service", value: "OK", unit: "", note: "ffmpeg + ffprobe detected · nvenc", dot: GREEN },
+        { label: "Sessions", value: `${onAir.length}`, unit: `of 6 max`, note: "One encoder per viewer session", dot: onAir.length >= 5 ? AMBER : GREEN },
+        { label: "Channels on air", value: `${onAir.length}`, unit: `of ${enriched.length}`, note: "Feeds run only while somebody watches", dot: GREEN },
+        { label: "Debrid cooldown", value: "0", unit: "seconds", note: "No 429 in the last 15 minutes", dot: GREEN },
+      ],
+      onAir, onAirCount: onAir.length, horizonHours: 24,
+
+      warnings: [
+        { title: "After Dark Animation horizon is 14h of 24h", detail: "Two overnight blocks have no resolvable release yet. The horizon keeper retries every five minutes.", action: "Regenerate channel", color: AMBER, act: this.note("Queued regenerate for after-dark-animation"), },
+        { title: "90s Animation has an uncovered 02:00–07:00 window", detail: "Dayparts leave five hours to the channel default, which is fine — flagged so it is deliberate.", action: "Open editor", color: BLUE, act: this.go("editor") },
+        { title: "publicBaseUrl points at 127.0.0.1", detail: "Stream URLs are unreachable from other devices until this is a Tailscale origin.", action: "Show config", color: AMBER, act: this.note("publicBaseUrl is set from PUBLIC_BASE_URL") },
+      ],
+      cooldownLabel: "cooldown 0s", cooldownColor: GREEN,
+      debridCalls: [
+        { endpoint: "torrents/createtorrent", count: 412, pct: 100 },
+        { endpoint: "torrents/mylist", count: 268, pct: 65 },
+        { endpoint: "torrents/requestdl", count: 141, pct: 34 },
+        { endpoint: "indexer/stream", count: 96, pct: 23 },
+      ],
+
+      statusFilters: filters,
+      visibleChannels: filter === "all" ? enriched : enriched.filter((c) => c.status === filter),
+      newChannel: this.go("editor"),
+
+      editorBreadcrumb: "Channels / Cartoon Time Capsule / cartoon-time-capsule",
+      draftName: this.state.name, draftId: "cartoon-time-capsule", draftSeed: this.state.seed,
+      setName: (e) => this.setState({ name: e.target.value }),
+      setSeed: (e) => this.setState({ seed: e.target.value }),
+      strategies,
+      poolSummary: "5 pools · 41 pinned titles · 1 live rule",
+      pools: POOLS.map((p) => ({ ...p, pins: p.pins.map(([name, weight]) => ({ name, weight })) })),
+      addPool: this.note("New pool added to the draft"),
+      hourTicks: [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => ({ label: `${pad(h % 24)}:00` })),
+      daypartRows: DAYPART_ROWS.map((row) => ({
+        label: row.label,
+        blocks: row.blocks.map(([name, s, e]) => ({
+          name, title: `${name} · ${pad(s % 24)}:00–${pad(e % 24)}:00`,
+          left: (s / 24) * 100, width: ((e - s) / 24) * 100,
+          border: row.label === "Uncovered" ? "#2f3542" : "rgba(245,181,68,.45)",
+          bg: row.label === "Uncovered" ? "#171a21" : "rgba(245,181,68,.14)",
+          go: this.note(`Editing block: ${name}`),
+        })),
+      })),
+      validation: "No overlaps. 02:00–06:00 falls back to the channel default, which is allowed.",
+      query: this.state.query, setQuery: (e) => this.setState({ query: e.target.value }),
+      searchResults: SEARCH.map(([name, meta]) => ({ name, meta, add: this.note(`Pinned ${name}`) })),
+      searchNote: "Results are annotated with network and years from TVmaze, so an era-accurate lineup can be assembled by hand.",
+      projection, preview12: this.note("Projected 12 hours without touching TorBox"),
+      save: this.note("Saved · channels.json written, cartoon-time-capsule rebuilt"),
+
+      presets: PRESETS.map((p) => ({
+        key: p.key, label: p.label, summary: p.summary, titles: p.titles, poolCount: p.pools,
+        dayparts: p.dayparts.map(([window, name]) => ({ window, name })),
+        state: p.installed ? "ALREADY REPRESENTED" : "AVAILABLE",
+        stateColor: p.installed ? BLUE : GREEN,
+        border: p.installed ? "#22262f" : "rgba(79,209,139,.28)",
+        actionLabel: p.installed ? "Replace channel" : "Apply preset",
+        actionBorder: p.installed ? "#2f3542" : GREEN,
+        actionBg: p.installed ? "#171a21" : "rgba(79,209,139,.14)",
+        actionColor: p.installed ? "#cfd4de" : GREEN,
+        cursor: "pointer", disabled: false,
+        previewLineup: this.note(`${p.label}: ${p.titles} titles across ${p.dayparts.length} dayparts`),
+        primary: this.note(p.installed ? `Replace ${p.key}? The existing channel is overwritten.` : `Applied ${p.key} — channels.json written`),
+      })),
+
+      guideRanges: [3, 6, 12].map((h) => ({ label: `${h}h`, go: () => this.setState({ guideHours: h }), ...chip(guideHours === h) })),
+      guideRows, ruler, gridWidth: 176 + guideHours * 60 * PX + 60,
+      nowMarker: 176 + Math.round(((now - startMs) / 60000) * PX),
+
+      sessionSummary: `${onAir.length} of 6 · LRU eviction at cap`,
+      sessions: onAir.map((c, i) => ({
+        channel: c.name, client: ["Stremio 1.1.4 · flatpak", "ExoPlayer · Fire TV Stick 4K Max", "Stremio 1.1.4 · macOS"][i % 3],
+        encoder: ["nvenc", "nvenc", "cpu"][i % 3], uptime: ["42m 18s", "8m 02s", "1h 06m"][i % 3],
+        state: ["PLAYING", "PAUSED", "PLAYING"][i % 3], color: [GREEN, AMBER, GREEN][i % 3],
+        act: this.note(`Evict session on ${c.id}?`),
+      })),
+      generation: enriched.slice(0, 5).map((c, i) => {
+        const pct = [100, 100, 96, 58, 14][i];
+        return { name: c.name, note: `${Math.round((pct / 100) * 24)}h of 24h filled · ${c.strategy}`,
+          pct, color: pct > 90 ? GREEN : AMBER, label: pct === 100 ? "complete" : `${pct}%` };
+      }),
+      diagnostics: DIAGNOSTICS.map((d) => ({ ...d, act: this.note(d.action), detailAct: this.note("GET /debug/hls/<channel>") })),
+      previewChannel: "cartoon-time-capsule",
+      skip: this.note("POST /api/channels/cartoon-time-capsule/skip"),
+      regenerate: this.note("POST /api/channels/cartoon-time-capsule/regenerate"),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

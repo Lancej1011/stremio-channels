@@ -1,10 +1,11 @@
 {
-  "key": "nick-at-nite",
-  "label": "Nick at Nite",
+  "key": "classic-sitcom-nights",
+  "label": "Classic Sitcom Nights",
   "summary": "Twenty-five classic sitcoms across the original, 70s/80s and modern-nostalgia eras.",
+  "legacyIds": ["nick-at-nite"],
   "channel": {
-    "id": "nick-at-nite",
-    "name": "Nick at Nite",
+    "id": "classic-sitcom-nights",
+    "name": "Classic Sitcom Nights",
     "description": "Classic comfort-TV sitcoms from black-and-white favorites through 2000s nostalgia.",
     "strategy": "sequential",
     "seed": 1985,
@@ -162,7 +163,7 @@
         ]
       },
       {
-        "name": "Nick at Nite",
+        "name": "Late-Night Sitcoms",
         "start": "23:00",
         "end": "02:00",
         "strategy": "sequential",

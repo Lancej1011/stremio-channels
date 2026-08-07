@@ -1,9 +1,10 @@
 {
-  "key": "adult-swim",
-  "label": "Adult Swim late night",
+  "key": "after-dark-animation",
+  "label": "After Dark Animation",
   "summary": "Adult animation, weighted to the small hours. Runs all day but the late block is the point.",
+  "legacyIds": ["adultswim"],
   "channel": {
-    "id": "adultswim",
+    "id": "after-dark-animation",
     "name": "After Dark Animation",
     "description": "Adult animation, all night.",
     "strategy": "sequential",

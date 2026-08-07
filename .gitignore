@@ -6,6 +6,12 @@ dist/
 coverage/
 *.tgz
 
+# Android build products and machine-local SDK configuration.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
 # Contains your debrid API key inside streamAddonUrl. Never commit it.
 config.json
 channels.json
@@ -13,3 +19,15 @@ channels.json.bak
 channels.json.tmp
 config.json.bak
 config.json.tmp
+
+# Timestamped copies of the real config, which holds live credentials.
+config.json.*.bak
+config.json.bak*
+*.pre-token.bak
+
+# Python bytecode from the desktop helper.
+__pycache__/
+*.pyc
+
+# Design handoff archive; the unpacked sources are tracked instead.
+*.zip

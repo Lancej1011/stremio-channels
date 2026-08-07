@@ -11,6 +11,8 @@ export const presetSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
   summary: z.string().min(1),
+  /** Previous built-in ids, so renamed generic presets do not look uninstalled. */
+  legacyIds: z.array(z.string()).default([]),
   channel: channelSchema,
 });
 

@@ -20,7 +20,7 @@ import {
   sleep,
   testConfig,
 } from "../testing/harness.ts";
-import { PlaybackSession, type NextProgram } from "./supervisor.ts";
+import { PlaybackSession, SessionManager, type NextProgram } from "./supervisor.ts";
 
 /** Each program in these tests. Long enough to span several segments, short enough to wait for. */
 const PROGRAM_SECONDS = 6;
@@ -85,6 +85,28 @@ async function waitUntil(check: () => boolean, message: string, timeoutMs = 20_0
 }
 
 describe("feed pipeline", { timeout: 180_000 }, () => {
+  it("coalesces duplicate stream warmups without merging actual viewers", async () => {
+    const dataDir = join(root, "coalesced-warmup");
+    const config = testConfig(dataDir);
+    const program = (): NextProgram => ({
+      title: "Warmup",
+      source: { url: clipA, offsetSeconds: 0, durationSeconds: 60, hasAudio: true },
+    });
+    const manager = new SessionManager(config, () => async () => program());
+
+    const firstWarm = await manager.warm("coalesced");
+    const duplicateWarm = await manager.warm("coalesced");
+    assert.equal(duplicateWarm.sessionId, firstWarm.sessionId, "duplicate warmup created an encoder");
+
+    const firstViewer = await manager.claim("coalesced");
+    assert.equal(firstViewer.sessionId, firstWarm.sessionId, "viewer did not adopt its warm pipeline");
+    const secondViewer = await manager.claim("coalesced");
+    assert.notEqual(secondViewer.sessionId, firstViewer.sessionId, "two viewers shared a pauseable feed");
+
+    manager.stopAll("test complete");
+    await sleep(500);
+  });
+
   it("keeps video timestamps monotonic and hole-free across program changes", async () => {
     const dataDir = join(root, "monotonic");
     const config = testConfig(dataDir);
@@ -193,12 +215,14 @@ describe("feed pipeline", { timeout: 180_000 }, () => {
     const config = testConfig(dataDir);
     const recorder = recordingLogger();
 
+    let deadSourceFailures = 0;
     const queue = queueProvider([
       { title: "Good", source: { url: clipA, offsetSeconds: 0, durationSeconds: PROGRAM_SECONDS, hasAudio: true } },
       // A link that has expired or a host that has gone away: ffmpeg exits immediately
       // and nonzero, leaving the rest of the slot to cover.
       {
         title: "Dead",
+        onSourceFailure: () => { deadSourceFailures += 1; },
         source: {
           url: join(root, "does-not-exist.mp4"),
           offsetSeconds: 0,
@@ -215,6 +239,7 @@ describe("feed pipeline", { timeout: 180_000 }, () => {
     await sleep(2500);
 
     assert.equal(feed.isRunning, true, "a dead source took the whole feed down");
+    assert.equal(deadSourceFailures, 1, "the channel was not told that the source failed");
     feed.stop("test complete");
     await sleep(500);
 

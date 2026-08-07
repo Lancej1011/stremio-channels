@@ -12,10 +12,13 @@ This is not a playlist that starts from the beginning. It is a real, continuousl
 running video feed with a schedule behind it.
 
 > [!IMPORTANT]
-> This is self-hosted software, not a hosted streaming service. The host must stay on,
-> every installation needs its owner's debrid credentials, and v0.1 must remain on
-> localhost, a trusted LAN, or a private VPN. The editor and write APIs do not have
-> built-in authentication; never forward port 7654 to the public internet.
+> This is self-hosted software, not a hosted streaming service. The host must stay on and
+> every installation needs its owner's debrid credentials. Out of the box there is no
+> authentication at all, so an unconfigured server belongs on localhost, a trusted LAN, or
+> a private VPN — never on a forwarded port 7654. To reach it from outside, set an
+> `accessToken` and put it behind an outbound tunnel; see
+> [Watching from other devices](#watching-from-other-devices). The channel editor stays
+> local-only either way.
 
 ```
 ▶ Now: Firefly - S01E05 - Out of Gas
@@ -48,9 +51,15 @@ time, not of a process staying alive.
 Debrid is not optional. Programs must be seekable HTTPS files for the feed to join one
 partway through; raw torrents cannot do that.
 
-There are two ways to resolve programs:
+There are three ways to resolve programs:
 
-**Direct TorBox** (`torboxApiKey`) — recommended if you use TorBox. Picks releases on
+**Isolated debrid agent** (`debridAgentUrl` and `debridAgentToken`) — recommended for
+TorBox. The agent is a small separate process that alone receives the provider API key;
+Headend holds only a narrowly scoped local-agent token. It preserves the same release
+selection while keeping the TorBox credential out of the main server, database, config,
+diagnostics and crash logs.
+
+**Legacy direct TorBox** (`torboxApiKey`) — supported for compatibility. Picks releases on
 real byte sizes and parsed release names, extracts the right episode from season packs,
 and drops the addon redirect from playback. Torrent hashes come from a plain indexer
 addon (`indexerUrl`, default Torrentio), because TorBox has no search of its own.
@@ -60,7 +69,9 @@ it at a Torrentio/Comet/MediaFusion install URL that already has your debrid key
 this server just uses whatever links it returns. Simpler, and your API key stays out of
 this server's config.
 
-If both are set, TorBox wins.
+The isolated agent takes precedence, followed by legacy direct TorBox, then the configured
+stream addon. Signed provider URLs are never returned to remote Headend viewers by default;
+they receive the server's HLS feed instead.
 
 ## Setup
 
@@ -76,8 +87,8 @@ $EDITOR .env
 docker compose up -d
 ```
 
-Set either `TORBOX_API_KEY` or `STREAM_ADDON_URL` when your editor opens, then start the
-container. Open
+For the recommended isolated TorBox setup, see [Isolated debrid agent](#isolated-debrid-agent).
+For a quick legacy setup, set `TORBOX_API_KEY` or `STREAM_ADDON_URL` in `.env`. Open
 <http://127.0.0.1:7654/ui>, then install
 `http://127.0.0.1:7654/manifest.json` in Stremio. See [DOCKER.md](DOCKER.md) for
 NVENC, QuickSync/VAAPI, upgrades, and private HTTPS access.
@@ -124,6 +135,36 @@ Start it:
 npm start
 ```
 
+### Isolated debrid agent
+
+The recommended TorBox deployment runs the credential-bearing API client separately from
+Headend. Generate a broker token and place both secrets in files readable only by their
+owner:
+
+```bash
+mkdir -p secrets
+node -e "require('fs').writeFileSync('secrets/debrid_agent_token', require('crypto').randomBytes(32).toString('base64url'), {mode:0o600})"
+$EDITOR secrets/torbox_api_key
+chmod 600 secrets/torbox_api_key secrets/debrid_agent_token
+docker compose -f compose.yaml -f compose.agent.yaml up -d
+```
+
+The agent has no published port. Compose mounts the TorBox key only into the agent; the
+main container receives the separate broker token. Remove `TORBOX_API_KEY` from `.env`
+when using this mode.
+
+For a native installation, start the agent under a separate OS account where possible:
+
+```bash
+TORBOX_API_KEY_FILE=/private/torbox_api_key \
+DEBRID_AGENT_TOKEN_FILE=/private/debrid_agent_token \
+npm exec stremio-channels-debrid-agent
+```
+
+Then configure Headend with `DEBRID_AGENT_URL=http://127.0.0.1:7665` and the same
+`DEBRID_AGENT_TOKEN_FILE`. The broker token permits use of the local agent but cannot be
+used to sign in to TorBox or call TorBox directly.
+
 For an always-on native install cloned at `~/stremio-channels`, copy
 `deploy/stremio-channels.service` to `~/.config/systemd/user/`, then run
 `systemctl --user daemon-reload` and
@@ -133,6 +174,65 @@ repository lives elsewhere.
 
 Then install `http://127.0.0.1:7654/manifest.json` in Stremio: Addons → Add addon →
 paste the URL. Your channels appear under the **Channels** catalog as TV items.
+
+Stremio is optional. Open **http://127.0.0.1:7654/watch** for the standalone Headend
+viewer: a full-screen live player with a TV-friendly program guide. It remembers the last
+channel in that browser and supports arrow keys, Enter, Back/Escape, Page Up/Down and
+fullscreen. Browsers that block autoplay show a Play button instead of failing silently.
+
+## The Headend viewer
+
+Headend is the read-only viewing surface; `/ui` remains the local administration surface.
+Open the guide with Arrow Up or the Guide button, move through channels and programs with
+the arrow keys, and press Enter to tune that channel live. Selecting a future program does
+not provide catch-up or DVR playback.
+
+Safari uses native HLS. Other modern browsers load the bundled HLS.js player, so the
+viewer has no CDN dependency. Installable-app metadata is available over HTTPS, but guide
+responses, private pages, playlists and video segments are never stored in an offline
+cache.
+
+### Linux desktop application
+
+Linux can run Headend as a regular desktop application with its own GTK window, launcher,
+native header controls and fullscreen mode. It uses the system WebKitGTK media engine—not
+Electron—and starts the `stremio-channels.service` user service automatically when needed.
+
+This installation needs the GTK 3 and WebKitGTK 4.1 Python bindings. They are already
+present on the supported development system; on Debian/Ubuntu their package names are
+normally `python3-gi`, `gir1.2-gtk-3.0` and `gir1.2-webkit2-4.1`.
+
+```bash
+npm run desktop:install
+```
+
+Open **Headend** from the Linux application menu, or run `headend`. For an unusual server
+address, launch `headend --url https://server.example/<token>/watch` or set
+`HEADEND_URL`. The default is the local `http://127.0.0.1:7654/watch` service.
+
+Desktop shortcuts: F11 toggles fullscreen, Escape leaves fullscreen, Ctrl+G opens the
+guide, and Ctrl+R reloads the viewer. The native header also provides previous/next
+channel, guide, reload and fullscreen buttons.
+
+### Native Android application
+
+The [`android/`](android/) project is a native Media3 viewer for Android 8.0 and newer.
+It has its own guide and requests a short-lived tune instruction from
+`GET /viewer/tune/:channelId`. Compatible sources play directly at the channel's current
+wall-clock offset; unsupported codecs and direct-play errors fall back automatically to
+the existing HLS channel. The client retunes itself at program boundaries.
+
+Build and install the debug APK:
+
+```bash
+cd android
+export ANDROID_HOME=/path/to/Android/Sdk
+./gradlew testDebugUnitTest assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+On first launch, paste the private Watch URL shown in the Headend admin interface. See
+[`android/README.md`](android/README.md) for LAN and away-from-home URL examples.
 
 ## The web UI
 
@@ -218,15 +318,15 @@ network programmed its day:
 
 | Preset | Shape |
 | --- | --- |
-| Boomerang Classics | Scooby mysteries, Hanna-Barbera afternoons and late-night action |
-| Cartoon Network Classics & Hits | Cartoon Cartoons mornings, afternoon action, modern prime time |
-| Nick at Nite / classic sitcoms | Retro mornings, 90s staples weighted into prime time |
-| Adult Swim | Adult animation, weighted heavily to the small hours |
+| Cartoon Time Capsule | Mystery cartoons, classic afternoons and late-night action |
+| Animation Eras | Classic mornings, afternoon action, modern prime time |
+| Classic Sitcom Nights | Retro mornings, 90s staples weighted into prime time |
+| After Dark Animation | Adult animation, weighted heavily to the small hours |
 | Sci-Fi channel | Anthology mornings, serialised prime time, overnight X-Files |
-| Disney | The classic animated afternoon, modern Disney in the evening |
-| Comedy Central | Daytime comedy, the raunchier material kept after 22:00 |
-| Nicktoons | 90s Nick animation split into morning, afternoon and late blocks |
-| Fox 5 Morning | School-morning cartoons and syndicated action throwbacks |
+| Animated Adventures | Classic animated afternoons and modern adventures in the evening |
+| Comedy Channel | Daytime comedy, the raunchier material kept after 22:00 |
+| 90s Animation | 90s cartoons split into morning, afternoon and late blocks |
+| School-Morning Throwback | School-morning cartoons and syndicated action throwbacks |
 
 Applying a preset copies it into your channels. It stays fully editable and never changes
 on its own. A preset whose channel id already exists is marked **Already represented**;
@@ -238,15 +338,74 @@ For anything not covered by a preset, the channel editor annotates search result
 network and years a show ran (via TVmaze), which makes assembling an era-accurate lineup
 practical.
 
+## Sharing channel guides
+
+A guide is programming only: which titles air, in what order, under which daypart grid. It
+carries no credentials, because nothing in a channel definition has any — the debrid
+account, API keys and access token all live in `config.json`, and a channel's `source` holds
+filter criteria rather than secrets. Every channel is re-validated against the schema on the
+way out, so a field added there later cannot ride along unnoticed.
+
+Whoever imports a guide supplies their own debrid account. Whether a channel actually plays
+for them depends on what their provider has cached, so an import is never verified: the
+scheduler already skips titles it cannot resolve.
+
+**Export** from the Channels view. The whole lineup downloads as a JSON file and is copied
+to the clipboard where the browser allows it. Or take a subset directly:
+
+```bash
+curl -s localhost:7654/api/channels/export?ids=scifi,sitcoms > guide.json
+```
+
+**Import** from the same view, either by pasting the guide or by linking to one someone
+published — a raw gist URL, not a web page. **Preview** shows exactly what would change
+without writing anything. Import stays disabled until that exact preview is confirmed; a
+changed remote file, collision mode, or local lineup requires a new preview. Three collision
+modes decide what happens when an id already
+exists:
+
+| Mode | Behaviour |
+| --- | --- |
+| `rename` | Keep both; the imported channel arrives as `scifi-2` |
+| `add` | Refuse the whole import and name the conflicts. The default |
+| `replace` | Overwrite yours in place, keeping list position |
+
+`add` is all-or-nothing: one collision means nothing is written, so a guide can never
+half-apply.
+
+Remote guide fetches are HTTPS-only and cannot connect to loopback, private, link-local,
+reserved, or cloud-metadata addresses. Redirects are checked one at a time and each request
+is pinned to the DNS answer that passed validation. If you deliberately host guides on a
+trusted LAN, set `allowPrivateGuideImports` to `true`; this also permits plain HTTP only for
+those private destinations. Imported channel poster URLs are removed by default so an
+author cannot use them as tracking pixels. `allowImportedGuideArtwork` opts back in.
+Automatic sources in an imported guide are also rejected by default: they could spend your
+MDBList/TMDB/Trakt quotas or query your Stremio library using local credentials. Prefer a
+guide containing explicit IMDb title IDs; `allowImportedGuideSources` is the explicit opt-in.
+
+Imports are capped at 200 channels, 10,000 explicit/excluded title references, and 5,000
+requested source results in total. A guide is always untrusted programming data: previewing
+does not contact the debrid provider or verify availability. After explicit confirmation,
+the normal channel warm-up may begin catalogue and debrid resolution for changed channels.
+Importing establishes no affiliation with the guide author.
+
+Both endpoints are part of the editor surface, so they answer only on loopback and to hosts
+named in `trustedHosts` — never through a tunnel, with or without an access token. A LAN
+device already listed in `trustedHosts` can therefore import from its browser, which is how
+you would do it from a phone at home. The desktop app reaches the same editor from its
+toolbar; the Android client is a viewer and has no import of its own.
+
 ## Watching from other devices
 
-Stremio only accepts an addon URL over plain HTTP when it is on `127.0.0.1`; other
-devices need HTTPS. v0.1 deliberately has no public-internet deployment because its
-editor and operational APIs are unauthenticated. The supported remote path is a private
-Tailscale network.
+Stremio only accepts an addon URL over plain HTTP when it is on `127.0.0.1`; other devices
+need HTTPS. There are two ways to provide it, and the right one depends on whether you can
+install Tailscale on the device that will be watching.
 
-Keep the Compose port bound to loopback, install Tailscale on the server and client, then
-publish the local port privately:
+### Private tailnet — nothing to configure
+
+If the watching device can run Tailscale, this is the simplest option and needs no token.
+Keep the Compose port bound to loopback, install Tailscale on the server and the client,
+then publish the local port privately:
 
 ```bash
 tailscale serve --bg 7654
@@ -264,8 +423,71 @@ PUBLIC_BASE_URL=https://channels.example.ts.net
 docker compose up -d --force-recreate
 ```
 
-Install `https://channels.example.ts.net/manifest.json` in Stremio. Tailscale access
-rules remain the authentication boundary. Do not use Tailscale Funnel for this release.
+Open `https://channels.example.ts.net/watch` for Headend, or install
+`https://channels.example.ts.net/manifest.json` in Stremio. Tailscale's access rules are
+the authentication boundary, and the whole server — editor included — is reachable to
+anything on your tailnet.
+
+### Public tunnel with an access token
+
+For a device that cannot join a tailnet, such as a phone on cellular, set an `accessToken`
+and expose the server through an outbound tunnel. The token becomes the first segment of
+every URL, and without it the server answers `404` to everything.
+
+Generate one, and treat it like a password:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(24).toString('base64url'))"
+```
+
+```dotenv
+ACCESS_TOKEN=<the generated value>
+PUBLIC_BASE_URL=https://channels.example.ts.net
+```
+
+Then publish the port. Funnel is outbound-only, so there is no port to forward and no
+router to reconfigure:
+
+```bash
+tailscale funnel --bg 7654
+```
+
+Open `https://channels.example.ts.net/<token>/watch` for Headend, or install
+`https://channels.example.ts.net/<token>/manifest.json` in Stremio. Both exact URLs are
+shown under the wordmark in the editor, where clicking one copies it.
+
+> [!IMPORTANT]
+> **The channel editor is not reachable through the tunnel**, with or without the token.
+> `/api`, `/debug` and `/ui` answer only to `127.0.0.1` and to hosts you name in
+> `trustedHosts`, because a single secret shared with a media player is the wrong thing
+> guarding a write API. Administer the server at `http://127.0.0.1:7654/ui` on the machine
+> itself.
+
+Two consequences worth knowing before you commit to this:
+
+- Requests that arrive through any reverse proxy — including `tailscale serve` on the same
+  hostname — are treated as remote, because that is what stops an attacker from spoofing a
+  local `Host` header through Funnel. To administer over the tailnet rather than at the
+  console, use the raw tailnet address (`http://100.x.y.z:7654/ui`) and add
+  `100.x.y.z:7654` to `trustedHosts`. Funnel is per-port and does not intercept it.
+- Rotating the token changes both private URLs, so Headend bookmarks must be updated and
+  Stremio has to be reinstalled on every device.
+
+As defence in depth, restrict the tunnel itself to the token path with
+`tailscale funnel --set-path`, so a scan of the bare hostname finds nothing at all.
+
+### Whichever you choose
+
+LAN devices are remote once a token is set. Either install the token'd URL on them, or add
+their view of the server to `trustedHosts`:
+
+```dotenv
+TRUSTED_HOSTS=192.168.1.58:7654
+```
+
+Bandwidth is the constraint people hit first. Each viewer costs a sustained upload of
+whatever `video.bitrate` says — 6 Mbps by default, which is more upstream than many home
+connections have. Drop it to `3000k` at 720p if playback stutters away from home.
 
 Verified on Stremio desktop (flatpak 1.1.4): each catalog card is labeled with the channel
 and current show (for example, `90s Sitcoms • Seinfeld`), while selecting it shows the full
@@ -326,13 +548,34 @@ or both.
 ## Configuration
 
 Everything in `config.json` can also be set by environment variable, which wins over the
-file: `PORT`, `HOST`, `PUBLIC_BASE_URL`, `DATA_DIR`, `CHANNELS_FILE`, `STREAM_ADDON_URL`,
-`TMDB_API_TOKEN`, `TMDB_API_KEY`, `ENCODER`, `LOG_LEVEL`.
+file: `PORT`, `HOST`, `PUBLIC_BASE_URL`, `ACCESS_TOKEN`, `TRUSTED_HOSTS`, `DATA_DIR`,
+`CHANNELS_FILE`, `DEBRID_AGENT_URL`, `DEBRID_AGENT_TOKEN`, `STREAM_ADDON_URL`,
+`TMDB_API_TOKEN`, `TMDB_API_KEY`, `ALLOW_PRIVATE_GUIDE_IMPORTS`,
+`ALLOW_IMPORTED_GUIDE_ARTWORK`, `ALLOW_IMPORTED_GUIDE_SOURCES`,
+`AUTH_FAILURE_LIMIT`, `TUNE_REQUEST_LIMIT_PER_MINUTE`,
+`DEBRID_HOURLY_OPERATION_LIMIT`, `DEBRID_DAILY_OPERATION_LIMIT`, `ENCODER`,
+`LOG_LEVEL`.
+
+`DEBRID_AGENT_TOKEN`, `TORBOX_API_KEY` and their agent-process equivalents also accept a
+`_FILE` suffix. Mounted secret files are preferred over environment variables.
 
 Useful knobs:
 
 | Key | Default | Notes |
 | --- | --- | --- |
+| `accessToken` | — | Secret first path segment required of remote clients. Unset means no authentication at all |
+| `trustedHosts` | `[]` | Host header values besides loopback allowed to reach the editor, as `192.168.1.58:7654` |
+| `allowUnauthenticatedNonLoopback` | `false` | Explicit trusted-LAN/container exception to fail-closed binding |
+| `debridAgentUrl` | — | URL of the private credential broker; configure together with its token |
+| `remoteDirectPlay` | `false` | Permit remote clients to receive signed provider URLs; leave disabled |
+| `persistResolvedUrls` | `false` | Store signed provider URLs in SQLite; leave disabled |
+| `allowPrivateGuideImports` | `false` | Permit remote guide fetches from private/LAN destinations |
+| `allowImportedGuideArtwork` | `false` | Preserve external poster URLs from imported guides |
+| `allowImportedGuideSources` | `false` | Let imported automatic sources use local catalogue credentials |
+| `authFailureLimit` | `20` | Failed remote token attempts allowed per client in the configured five-minute window |
+| `tuneRequestLimitPerMinute` | `30` | Remote tune/session-allocating requests allowed per client each minute |
+| `debridHourlyOperationLimit` | `120` | Persisted hourly TorBox operation ceiling |
+| `debridDailyOperationLimit` | `1000` | Persisted UTC-day TorBox operation ceiling |
 | `video.bitrate` | `6000k` | Output bitrate per channel |
 | `hls.segmentSeconds` | `2` | Encoders run at real time, so this sets how long tuning in takes |
 | `idleShutdownSeconds` | `120` | How long a feed survives with nobody watching |
@@ -358,6 +601,7 @@ rather than fixing playback.
 ## Diagnostics
 
 - `GET /health` — which channels exist and which are currently live
+- `GET /viewer/guide.json?hours=6` — the sanitized read-only guide used by Headend
 - `GET /guide` — plain-text now/next for every channel
 - `GET /api/status` — adds `debridCalls`, a running count of debrid API requests by
   endpoint. Debrid rate limits are the binding constraint on how fast channels fill, so
@@ -370,7 +614,13 @@ rather than fixing playback.
 
 The two fields worth checking first are `publicBaseUrlIsLoopback` (a stream URL pointing at
 127.0.0.1 is unreachable from any other device) and `codecsAgree` (false means the server is
-describing the stream to the player as something it is not).
+describing the stream to the player as something it is not). `accessTokenConfigured` tells
+you whether a device that cannot reach the server is failing on routing or on a missing
+token; the token itself is masked as `<token>` throughout, so this output is safe to paste
+into an issue.
+
+With an `accessToken` set, `/health` and `/guide` need it too (`/<token>/health`), and
+`/api` and `/debug` are local-only — reach them from the machine itself.
 
 ## Tests
 
@@ -437,5 +687,16 @@ Stremio Channels does not include media, debrid credentials, or a hosted service
 operator is responsible for the content they access and for complying with applicable
 law and the terms of their metadata, indexer, addon, and debrid providers.
 
+This is an independent, unofficial project and is not affiliated with or endorsed by
+Stremio, TorBox, any television network, studio or streaming service. Bundled presets use
+generic names and describe programming styles rather than branded channels.
+
+Operation necessarily sends title identifiers to configured metadata/indexer services and
+torrent hashes, file identifiers and download requests to the operator's configured debrid
+provider. Viewing devices receive guide metadata and, for local direct play only, a
+short-lived signed download URL. Artwork hosts can observe ordinary image requests. No
+telemetry or central Headend service is included.
+
 Released under the [MIT License](LICENSE). Security reports should follow
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Maintainer release and artifact-verification procedures are in
+[RELEASING.md](RELEASING.md).

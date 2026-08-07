@@ -1,11 +1,12 @@
 {
-  "key": "nicktoons-90s",
-  "label": "90s / 00s Nicktoons",
-  "summary": "A 90s-first Nickelodeon cartoon lineup with the essential 2000s favorites.",
+  "key": "nineties-animation",
+  "label": "90s / 00s Animation",
+  "summary": "A 90s-first cartoon lineup with essential 2000s favorites.",
+  "legacyIds": ["nicktoons"],
   "channel": {
-    "id": "nicktoons",
-    "name": "Nicktoons",
-    "description": "The best of 90s Nickelodeon animation with essential 2000s hits.",
+    "id": "nineties-animation",
+    "name": "90s Animation",
+    "description": "90s animation with essential 2000s hits.",
     "strategy": "sequential",
     "seed": 1991,
     "content": [],
@@ -108,8 +109,8 @@
         "refreshHours": 168
       },
       {
-        "id": "weird-nick",
-        "name": "Weird Nick",
+        "id": "oddball-animation",
+        "name": "Oddball Animation",
         "content": [
           {
             "type": "series",
@@ -142,7 +143,7 @@
     ],
     "dayparts": [
       {
-        "name": "Morning Nicktoons",
+        "name": "Morning Animation",
         "start": "06:00",
         "end": "12:00",
         "strategy": "sequential",
@@ -170,12 +171,12 @@
         ]
       },
       {
-        "name": "Weird Nick",
+        "name": "Oddball Animation",
         "start": "22:00",
         "end": "02:00",
         "strategy": "sequential",
         "poolIds": [
-          "weird-nick"
+          "oddball-animation"
         ]
       }
     ]
